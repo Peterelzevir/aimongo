@@ -8,7 +8,7 @@ import { getUserById, getUserByEmail, updateUser } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 // Edge Runtime compatibility
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // Secret key untuk JWT - gunakan .env di aplikasi nyata
 const JWT_SECRET = process.env.JWT_SECRET || 'ai-peter-secret-key-change-this';
