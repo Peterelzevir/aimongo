@@ -9,7 +9,18 @@
 
 import { connectToDatabase } from './mongodb';
 import User from '@/models/User';
-import bcrypt from 'bcryptjs';
+
+// Fungsi hash sederhana dengan salt yang konsisten
+const SALT = 'PetAiWebsite'; // Salt yang konsisten
+function simpleHash(password) {
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return (hash + SALT).toString();
+}
 
 /**
  * Create a demo user if no users exist in the database
@@ -30,7 +41,7 @@ export async function seedDemoUser() {
     const demoUser = new User({
       name: 'Demo User',
       email: 'demo@example.com',
-      password: 'password123', // Will be hashed by pre-save hook
+      password: simpleHash('password123'), // Hash password sederhana
       status: 'active'
     });
     
@@ -144,7 +155,7 @@ export async function createUser(userData) {
     const newUser = new User({
       name: userData.name.trim(),
       email: normalizedEmail,
-      password: userData.password,
+      password: simpleHash(userData.password), // Hash password sederhana
       status: 'active'
     });
     
@@ -195,11 +206,8 @@ export async function updateUser(userId, updateData) {
     
     // Handling special case for password
     if (updateData.password) {
-      // Password will be hashed by the pre-save middleware in the model
-      // But here we need to use findByIdAndUpdate, which won't trigger pre-save
-      // So we hash it manually
-      const salt = await bcrypt.genSalt(12);
-      updateData.password = await bcrypt.hash(updateData.password, salt);
+      // Hash password sederhana
+      updateData.password = simpleHash(updateData.password);
     }
     
     // Update user with new data and timestamps
@@ -255,8 +263,8 @@ export async function verifyCredentials(email, password) {
       return null;
     }
     
-    // Verify password using the model method
-    const passwordMatch = await user.verifyPassword(password);
+    // Verify password using the simple hash
+    const passwordMatch = user.password === simpleHash(password);
     console.log('Password match result:', passwordMatch);
     
     if (!passwordMatch) {
@@ -348,7 +356,7 @@ export async function resetPassword(email, newPassword) {
       throw new Error('User tidak ditemukan');
     }
     
-    user.password = newPassword;
+    user.password = simpleHash(newPassword); // Hash password sederhana
     user.passwordResetAt = new Date();
     await user.save();
     
