@@ -37,7 +37,8 @@ export default function LoginPage() {
     size: Math.random() * 3 + 1,
     x: Math.random() * 100,
     y: Math.random() * 100,
-    duration: Math.random() * 20 + 10
+    duration: Math.random() * 20 + 10,
+    delay: Math.random() * 20 // Pre-compute delay value
   }));
 
   // Direct API login function that matches the API route implementation
@@ -246,7 +247,7 @@ export default function LoginPage() {
               repeat: Infinity,
               repeatType: "loop",
               ease: "linear",
-              delay: Math.random() * 20
+              delay: particle.delay
             }}
           />
         ))}
