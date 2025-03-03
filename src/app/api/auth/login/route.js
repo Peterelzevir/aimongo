@@ -6,7 +6,7 @@ import { SignJWT } from 'jose';
 const JWT_SECRET = process.env.JWT_SECRET || 'ai-peter-secret-key-change-this';
 
 // Edge Runtime compatibility
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // CORS headers
 const corsHeaders = {
