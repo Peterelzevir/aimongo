@@ -1,20 +1,25 @@
 // src/app/api/auth/register/route.js
 import { NextResponse } from 'next/server';
-import { createUser, getUserByEmail } from '@/lib/db';
+import { cookies } from 'next/headers';
 import { SignJWT } from 'jose';
+import { createUser, checkUserExists } from '@/lib/db';
 
-// Secret key untuk JWT - gunakan .env di aplikasi nyata
-const JWT_SECRET = process.env.JWT_SECRET || 'ai-peter-secret-key-change-this';
-// Siapkan secret key dalam format yang diperlukan jose
-const getSecretKey = () => new TextEncoder().encode(JWT_SECRET);
+// Prevent caching for this route
+export const dynamic = 'force-dynamic';
 
 // Edge Runtime compatibility
 export const runtime = 'edge';
 
+// Secret key untuk JWT - gunakan .env di aplikasi nyata
+const JWT_SECRET = process.env.JWT_SECRET || 'ai-peter-secret-key-change-this';
+
+// Siapkan secret key dalam format yang diperlukan jose
+const getSecretKey = () => new TextEncoder().encode(JWT_SECRET);
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -29,171 +34,175 @@ export async function OPTIONS() {
 }
 
 /**
- * Validasi format email yang lebih baik
+ * Register a new user
  */
-function isValidEmail(email) {
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return emailRegex.test(email);
-}
-
 export async function POST(request) {
   try {
-    console.log('Registration API called');
+    // Track request for debugging
+    const clientIp = request.headers.get('x-forwarded-for') || 'unknown';
+    console.log(`User registration request from IP: ${clientIp}`);
+
+    // Parse request body
+    const body = await request.json();
     
-    // Parse request body dengan error handling
-    let body;
-    try {
-      body = await request.json();
-      console.log('Request body received:', body);
-    } catch (parseError) {
-      console.error('Error parsing request JSON:', parseError);
-      return NextResponse.json(
-        { success: false, message: 'Format permintaan tidak valid' },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-    
+    // Validate required fields
     const { name, email, password } = body;
     
-    // Validasi input
     if (!name || !email || !password) {
       return NextResponse.json(
-        { success: false, message: 'Semua kolom harus diisi' },
+        { 
+          success: false, 
+          message: 'Data tidak lengkap. Nama, email, dan password diperlukan.', 
+          code: 'invalid_data' 
+        },
         { status: 400, headers: corsHeaders }
       );
     }
     
-    // Normalisasi email dan name
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedName = name.trim();
-    
-    // Validasi format email
-    if (!isValidEmail(normalizedEmail)) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { success: false, message: 'Format email tidak valid' },
+        { 
+          success: false, 
+          message: 'Format email tidak valid', 
+          code: 'invalid_email' 
+        },
         { status: 400, headers: corsHeaders }
       );
     }
     
-    // Validasi panjang password
-    if (password.length < 6) {
+    // Validate password strength (at least 8 characters)
+    if (password.length < 8) {
       return NextResponse.json(
-        { success: false, message: 'Password minimal 6 karakter' },
+        { 
+          success: false, 
+          message: 'Password harus minimal 8 karakter', 
+          code: 'weak_password' 
+        },
         { status: 400, headers: corsHeaders }
       );
     }
     
-    // Cek apakah email sudah ada
-    let existingUser;
+    // Check if user already exists
     try {
-      existingUser = await getUserByEmail(normalizedEmail);
-    } catch (checkError) {
-      console.error('Check user error:', checkError);
+      const userExists = await checkUserExists(email);
+      
+      if (userExists) {
+        console.log('Registration failed: Email already exists:', email);
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'Email sudah terdaftar. Silakan gunakan email lain atau login.', 
+            code: 'email_exists' 
+          },
+          { status: 409, headers: corsHeaders }
+        );
+      }
+    } catch (dbError) {
+      console.error('Database error when checking existing user:', dbError);
       return NextResponse.json(
-        { success: false, message: 'Gagal memeriksa data pengguna' },
+        { 
+          success: false, 
+          message: 'Terjadi kesalahan saat memeriksa email', 
+          code: 'database_error' 
+        },
         { status: 500, headers: corsHeaders }
       );
     }
     
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, message: 'Email sudah terdaftar' },
-        { status: 409, headers: corsHeaders } // Gunakan kode 409 Conflict untuk email yang sudah ada
-      );
-    }
+    // No need to hash password here as it's done in createUser
     
-    // Buat user baru dengan data yang sudah dinormalisasi
-    let user;
+    // Create new user
+    let newUser;
     try {
-      user = await createUser({ 
-        name: normalizedName, 
-        email: normalizedEmail, 
-        password 
+      newUser = await createUser({
+        name,
+        email,
+        password,
+        // Status and createdAt are handled in the createUser function
       });
+      
+      console.log('User created successfully:', newUser._id);
     } catch (createError) {
-      console.error('Create user error:', createError);
+      console.error('Error creating user:', createError);
       return NextResponse.json(
-        { success: false, message: 'Gagal membuat pengguna baru' },
+        { 
+          success: false, 
+          message: 'Gagal membuat akun. Silakan coba lagi.', 
+          code: 'create_error' 
+        },
         { status: 500, headers: corsHeaders }
       );
     }
     
-    if (!user || !user._id) {
-      return NextResponse.json(
-        { success: false, message: 'Gagal membuat pengguna' },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-    
-    // Buat JWT token menggunakan jose
+    // Generate JWT token
     let token;
     try {
+      // Convert MongoDB ObjectId to string if needed
+      const userId = newUser._id.toString ? newUser._id.toString() : newUser._id;
+      
       token = await new SignJWT({ 
-        id: user._id.toString(), // MongoDB uses _id
-        email: user.email,
-        name: user.name,
-        // Tambahkan waktu saat token dibuat
+        id: userId,
+        email: newUser.email,
+        name: newUser.name,
         iat: Math.floor(Date.now() / 1000)
       })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('7d') // Token berlaku 7 hari
-      .sign(getSecretKey());
-    } catch (jwtError) {
-      console.error('Error signing JWT:', jwtError);
-      return NextResponse.json(
-        { success: false, message: 'Gagal membuat token otentikasi' },
-        { status: 500, headers: corsHeaders }
-      );
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('7d')
+        .sign(getSecretKey());
+      
+      console.log('JWT token generated for user:', newUser._id);
+    } catch (tokenError) {
+      console.error('Error generating token:', tokenError);
+      // We'll continue without a token
+      // User can still login later
     }
     
-    // Buat response dengan cookie dan CORS headers
-    const response = NextResponse.json(
-      { 
-        success: true, 
-        message: 'Pendaftaran berhasil',
-        user: {
-          id: user._id.toString(), // MongoDB uses _id
-          name: user.name,
-          email: user.email
-        },
-        token // Kirim token untuk client-side storage
+    // Create response
+    const response = NextResponse.json({
+      success: true,
+      message: 'Registrasi berhasil',
+      user: {
+        id: newUser._id.toString(),
+        name: newUser.name,
+        email: newUser.email
       },
-      { status: 201, headers: corsHeaders }
-    );
+      ...(token && { token }) // Only include token if generated successfully
+    }, { headers: corsHeaders });
     
-    // Set token ke cookie
-    try {
+    // Set auth cookie if token was generated
+    if (token) {
       response.cookies.set({
         name: 'auth-token',
         value: token,
         httpOnly: true,
-        maxAge: 60 * 60 * 24 * 7, // 7 hari
-        path: '/',
-        secure: process.env.NODE_ENV === 'production', // Hanya HTTPS di production
-        sameSite: 'lax'
-      });
-      
-      // Cookie tambahan untuk frontend yang non-httpOnly (opsional)
-      response.cookies.set({
-        name: 'user-logged-in',
-        value: 'true',
-        httpOnly: false, // Dapat diakses oleh JavaScript
-        maxAge: 60 * 60 * 24 * 7, // 7 hari
+        maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/',
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax'
       });
-    } catch (cookieError) {
-      console.error('Error setting cookie:', cookieError);
-      // Masih lanjutkan karena token sudah dikirim di body response
     }
+    
+    // Add security headers
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    
+    // Make sure CORS headers are preserved
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
     
     return response;
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(
-      { success: false, message: 'Terjadi kesalahan saat mendaftar' },
+      { 
+        success: false, 
+        message: 'Terjadi kesalahan saat registrasi', 
+        code: 'server_error' 
+      },
       { status: 500, headers: corsHeaders }
     );
   }
