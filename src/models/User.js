@@ -2,18 +2,6 @@
 import mongoose from 'mongoose';
 import validator from 'validator';
 
-// Simple hash function matching the one in db.js
-const SALT = 'PetAiWebsite'; 
-function simpleHash(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return (hash + SALT).toString();
-}
-
 // Define User Schema
 const userSchema = new mongoose.Schema({
   name: {
@@ -56,29 +44,8 @@ const userSchema = new mongoose.Schema({
   timestamps: true, // Adds createdAt and updatedAt fields automatically
 });
 
-// Pre-save middleware to hash password before saving
-userSchema.pre('save', function(next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
-  
-  try {
-    // Hash password with the simple hash function
-    this.password = simpleHash(this.password);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Method to check if password is correct
-userSchema.methods.verifyPassword = function(candidatePassword) {
-  try {
-    // Compare using the simple hash method
-    return this.password === simpleHash(candidatePassword);
-  } catch (error) {
-    throw new Error('Error verifying password');
-  }
-};
+// Important: We're NOT adding any password hashing in the model
+// This is because db.js is already handling all the password operations
 
 // Method to sanitize user object for responses
 userSchema.methods.toJSON = function() {
