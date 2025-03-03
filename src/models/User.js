@@ -1,7 +1,18 @@
 // src/models/User.js
 import mongoose from 'mongoose';
 import validator from 'validator';
-import bcrypt from 'bcryptjs';
+
+// Simple hash function matching the one in db.js
+const SALT = 'PetAiWebsite'; 
+function simpleHash(password) {
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return (hash + SALT).toString();
+}
 
 // Define User Schema
 const userSchema = new mongoose.Schema({
@@ -46,14 +57,13 @@ const userSchema = new mongoose.Schema({
 });
 
 // Pre-save middleware to hash password before saving
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', function(next) {
   // Only hash the password if it has been modified (or is new)
   if (!this.isModified('password')) return next();
   
   try {
-    // Hash password with bcrypt (cost factor 12)
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+    // Hash password with the simple hash function
+    this.password = simpleHash(this.password);
     next();
   } catch (error) {
     next(error);
@@ -61,9 +71,10 @@ userSchema.pre('save', async function(next) {
 });
 
 // Method to check if password is correct
-userSchema.methods.verifyPassword = async function(candidatePassword) {
+userSchema.methods.verifyPassword = function(candidatePassword) {
   try {
-    return await bcrypt.compare(candidatePassword, this.password);
+    // Compare using the simple hash method
+    return this.password === simpleHash(candidatePassword);
   } catch (error) {
     throw new Error('Error verifying password');
   }
