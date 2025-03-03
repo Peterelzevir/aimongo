@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -30,16 +30,18 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router]);
 
-  // Particles animation
-  const totalParticles = 30;
-  const particles = Array.from({ length: totalParticles }).map((_, i) => ({
-    id: i,
-    size: Math.random() * 3 + 1,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    duration: Math.random() * 20 + 10,
-    delay: Math.random() * 20 // Pre-compute delay value
-  }));
+  // Particles animation - using useMemo to prevent recreating on each render
+  const particles = useMemo(() => {
+    const totalParticles = 30;
+    return Array.from({ length: totalParticles }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 3 + 1,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      duration: Math.random() * 20 + 10,
+      delay: Math.random() * 20
+    }));
+  }, []);
 
   // Direct API login function that matches the API route implementation
   const loginWithAPI = async (credentials) => {
@@ -224,7 +226,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden bg-primary-900 relative">
-      {/* Animated background particles */}
+      {/* Animated background particles - FIXED simplified animation */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         
@@ -238,10 +240,8 @@ export default function LoginPage() {
               left: `${particle.x}%`,
               top: `${particle.y}%`,
             }}
-            animate={{
-              y: [0, -500, 0],
-              opacity: [0, 0.8, 0],
-            }}
+            initial={{ y: 0, opacity: 0 }}
+            animate={{ y: -500, opacity: [0, 0.8, 0] }}
             transition={{
               duration: particle.duration,
               repeat: Infinity,
@@ -320,17 +320,16 @@ export default function LoginPage() {
             </div>
           </motion.div>
           
-          {/* Decorative elements */}
+          {/* Decorative elements - FIXED animation */}
           <motion.div 
             className="absolute -bottom-10 -right-10 w-64 h-64 rounded-full bg-accent/5 blur-3xl"
-            animate={{ 
-              scale: [1, 1.2, 1],
-              opacity: [0.5, 0.7, 0.5] 
-            }}
+            initial={{ scale: 1, opacity: 0.5 }}
+            animate={{ scale: 1.2, opacity: 0.7 }}
             transition={{ 
               duration: 15, 
               repeat: Infinity,
-              repeatType: "reverse" 
+              repeatType: "reverse",
+              ease: "easeInOut" 
             }}
           />
         </div>
@@ -353,181 +352,179 @@ export default function LoginPage() {
         
         <div className="w-full max-w-md">
           {/* Login success animation */}
-          <AnimatePresence>
-            {loginSuccess ? (
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 1.5, opacity: 0 }}
-                transition={{ duration: 0.5, type: "spring" }}
-                className="mb-10 flex flex-col items-center"
+          {loginSuccess ? (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 0.5, type: "spring" }}
+              className="mb-10 flex flex-col items-center"
+            >
+              <motion.div 
+                initial={{ scale: 0 }}
+                animate={{ scale: 1.2 }}
+                transition={{ duration: 0.6 }}
+                className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-4"
               >
-                <motion.div 
-                  initial={{ scale: 0 }}
-                  animate={{ scale: [0, 1.2, 1] }}
-                  transition={{ duration: 0.6, times: [0, 0.7, 1] }}
-                  className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-4"
-                >
-                  <FiCheck className="text-green-500" size={40} />
-                </motion.div>
-                <h2 className="text-2xl font-bold text-primary-50 mb-2">Login Berhasil!</h2>
-                <p className="text-primary-300 text-center">Mengalihkan ke halaman chat...</p>
+                <FiCheck className="text-green-500" size={40} />
               </motion.div>
-            ) : (
+              <h2 className="text-2xl font-bold text-primary-50 mb-2">Login Berhasil!</h2>
+              <p className="text-primary-300 text-center">Mengalihkan ke halaman chat...</p>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              {/* Login header */}
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-primary-50 mb-2">Login</h1>
+                <p className="text-primary-300">
+                  Masuk untuk lanjut mengobrol dengan AI Peter
+                </p>
+              </div>
+              
+              {/* Login form */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.5 }}
+                transition={{ delay: 0.2, duration: 0.5 }}
+                className="bg-primary-800/40 backdrop-blur-sm border border-primary-700/50 rounded-xl p-6 shadow-xl"
               >
-                {/* Login header */}
-                <div className="text-center mb-8">
-                  <h1 className="text-3xl font-bold text-primary-50 mb-2">Login</h1>
-                  <p className="text-primary-300">
-                    Masuk untuk lanjut mengobrol dengan AI Peter
-                  </p>
-                </div>
-                
-                {/* Login form */}
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2, duration: 0.5 }}
-                  className="bg-primary-800/40 backdrop-blur-sm border border-primary-700/50 rounded-xl p-6 shadow-xl"
-                >
-                  {error && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center text-red-300 text-sm"
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center text-red-300 text-sm"
+                  >
+                    <FiAlertCircle className="flex-shrink-0 mr-2" size={18} />
+                    <span>{error}</span>
+                    <button 
+                      onClick={() => setError('')}
+                      className="ml-auto text-red-300 hover:text-red-200"
                     >
-                      <FiAlertCircle className="flex-shrink-0 mr-2" size={18} />
-                      <span>{error}</span>
-                      <button 
-                        onClick={() => setError('')}
-                        className="ml-auto text-red-300 hover:text-red-200"
-                      >
-                        <FiX size={16} />
-                      </button>
-                    </motion.div>
-                  )}
-                  
-                  <form onSubmit={handleSubmit}>
-                    <div className="space-y-5">
-                      {/* Email Field */}
-                      <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-primary-200 mb-1">
-                          Alamat Email
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <FiMail className="text-primary-400" size={18} />
-                          </div>
-                          <input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="block w-full bg-primary-700/40 border border-primary-600 rounded-lg py-3 pl-10 pr-3 text-primary-100 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all"
-                            placeholder="email@example.com"
-                            required
-                          />
+                      <FiX size={16} />
+                    </button>
+                  </motion.div>
+                )}
+                
+                <form onSubmit={handleSubmit}>
+                  <div className="space-y-5">
+                    {/* Email Field */}
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-primary-200 mb-1">
+                        Alamat Email
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <FiMail className="text-primary-400" size={18} />
                         </div>
-                      </div>
-                      
-                      {/* Password Field */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label htmlFor="password" className="block text-sm font-medium text-primary-200">
-                            Password
-                          </label>
-                          <a href="#" className="text-xs text-accent hover:text-accent-light transition-colors">
-                            Lupa password?
-                          </a>
-                        </div>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <FiLock className="text-primary-400" size={18} />
-                          </div>
-                          <input
-                            id="password"
-                            type={showPassword ? "text" : "password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="block w-full bg-primary-700/40 border border-primary-600 rounded-lg py-3 pl-10 pr-10 text-primary-100 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all"
-                            placeholder="••••••••"
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? (
-                              <FiEyeOff className="text-primary-400 hover:text-primary-200" size={18} />
-                            ) : (
-                              <FiEye className="text-primary-400 hover:text-primary-200" size={18} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Remember Me */}
-                      <div className="flex items-center">
                         <input
-                          id="remember-me"
-                          type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                          className="h-4 w-4 rounded border-primary-600 text-accent focus:ring-accent/30 bg-primary-700"
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="block w-full bg-primary-700/40 border border-primary-600 rounded-lg py-3 pl-10 pr-3 text-primary-100 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all"
+                          placeholder="email@example.com"
+                          required
                         />
-                        <label htmlFor="remember-me" className="ml-2 block text-sm text-primary-300">
-                          Ingat saya
-                        </label>
-                      </div>
-                      
-                      {/* Submit Button */}
-                      <div className="pt-2">
-                        <motion.button
-                          type="submit"
-                          disabled={isLoading}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-accent hover:bg-accent-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all
-                          ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        >
-                          {isLoading ? (
-                            <>
-                              <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Processing...
-                            </>
-                          ) : 'Login'}
-                        </motion.button>
                       </div>
                     </div>
-                  </form>
-                </motion.div>
-                
-                {/* Register link */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4, duration: 0.5 }}
-                  className="mt-6 text-center"
-                >
-                  <p className="text-primary-300">
-                    Belum punya akun?{' '}
-                    <Link href="/register" className="text-accent hover:text-accent-light font-medium transition-colors">
-                      Daftar sekarang
-                    </Link>
-                  </p>
-                </motion.div>
+                    
+                    {/* Password Field */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label htmlFor="password" className="block text-sm font-medium text-primary-200">
+                          Password
+                        </label>
+                        <a href="#" className="text-xs text-accent hover:text-accent-light transition-colors">
+                          Lupa password?
+                        </a>
+                      </div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <FiLock className="text-primary-400" size={18} />
+                        </div>
+                        <input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="block w-full bg-primary-700/40 border border-primary-600 rounded-lg py-3 pl-10 pr-10 text-primary-100 placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all"
+                          placeholder="••••••••"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <FiEyeOff className="text-primary-400 hover:text-primary-200" size={18} />
+                          ) : (
+                            <FiEye className="text-primary-400 hover:text-primary-200" size={18} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Remember Me */}
+                    <div className="flex items-center">
+                      <input
+                        id="remember-me"
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="h-4 w-4 rounded border-primary-600 text-accent focus:ring-accent/30 bg-primary-700"
+                      />
+                      <label htmlFor="remember-me" className="ml-2 block text-sm text-primary-300">
+                        Ingat saya
+                      </label>
+                    </div>
+                    
+                    {/* Submit Button */}
+                    <div className="pt-2">
+                      <motion.button
+                        type="submit"
+                        disabled={isLoading}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-accent hover:bg-accent-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all
+                        ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      >
+                        {isLoading ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Processing...
+                          </>
+                        ) : 'Login'}
+                      </motion.button>
+                    </div>
+                  </div>
+                </form>
               </motion.div>
-            )}
-          </AnimatePresence>
+              
+              {/* Register link */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4, duration: 0.5 }}
+                className="mt-6 text-center"
+              >
+                <p className="text-primary-300">
+                  Belum punya akun?{' '}
+                  <Link href="/register" className="text-accent hover:text-accent-light font-medium transition-colors">
+                    Daftar sekarang
+                  </Link>
+                </p>
+              </motion.div>
+            </motion.div>
+          )}
         </div>
       </div>
     </div>
