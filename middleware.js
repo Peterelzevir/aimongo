@@ -114,4 +114,4 @@ export const config = {
 };
 
 // Explicitly mark as compatible with Edge Runtime
-export const runtime = 'edge';
+export const runtime = 'nodejs';
