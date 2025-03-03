@@ -1,8 +1,8 @@
-// src/app/api/auth/me/route.js
+// src/app/api/auth/register/route.js
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { jwtVerify, SignJWT } from 'jose';
-import { getUserById, getUserByEmail } from '@/lib/db';
+import { SignJWT } from 'jose';
+import { createUser, checkUserExists } from '@/lib/db';
 
 // Prevent caching for this route
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ const getSecretKey = () => new TextEncoder().encode(JWT_SECRET);
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -34,191 +34,155 @@ export async function OPTIONS() {
 }
 
 /**
- * Extract token from various sources
- * @param {Request} request - Next.js request object
- * @returns {string|null} The token or null if not found
+ * Register a new user
  */
-function getAuthToken(request) {
-  // 1. Try to get token from cookie first
-  const cookieStore = cookies();
-  const tokenCookie = cookieStore.get('auth-token')?.value;
-  
-  if (tokenCookie) {
-    console.log('Token found in cookie');
-    return tokenCookie;
-  }
-  
-  // 2. Try to get token from Authorization header
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    console.log('Token found in Authorization header');
-    return authHeader.substring(7);
-  }
-  
-  // 3. Try to get token from query parameter (useful for WebSocket connections)
-  const url = new URL(request.url);
-  const tokenParam = url.searchParams.get('token');
-  if (tokenParam) {
-    console.log('Token found in URL parameter');
-    return tokenParam;
-  }
-  
-  console.log('No token found in request');
-  return null;
-}
-
-export async function GET(request) {
+export async function POST(request) {
   try {
     // Track request for debugging
     const clientIp = request.headers.get('x-forwarded-for') || 'unknown';
-    console.log(`User verification request from IP: ${clientIp}`);
+    console.log(`User registration request from IP: ${clientIp}`);
+
+    // Parse request body
+    const body = await request.json();
     
-    // Get token from either cookie, header, or query param
-    const token = getAuthToken(request);
+    // Validate required fields
+    const { name, email, password } = body;
     
-    if (!token) {
-      console.log('No authentication token found');
+    if (!name || !email || !password) {
       return NextResponse.json(
-        { success: false, message: 'Tidak terautentikasi', code: 'no_token' },
         { 
-          status: 401,
-          headers: {
-            'WWW-Authenticate': 'Bearer realm="api"',
-            'Cache-Control': 'no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            ...corsHeaders
-          }
-        }
+          success: false, 
+          message: 'Data tidak lengkap. Nama, email, dan password diperlukan.', 
+          code: 'invalid_data' 
+        },
+        { status: 400, headers: corsHeaders }
       );
     }
     
-    // Verify token with jose
-    let payload;
-    try {
-      console.log('Verifying JWT token');
-      const { payload: verifiedPayload } = await jwtVerify(
-        token, 
-        getSecretKey(),
-        {
-          algorithms: ['HS256']
-        }
-      );
-      payload = verifiedPayload;
-      console.log('Token verified successfully, payload:', payload);
-    } catch (verifyError) {
-      console.error('Token verification failed:', verifyError.message);
-      
-      // More specific error message based on error type
-      let errorMessage = 'Token tidak valid';
-      
-      if (verifyError.code === 'ERR_JWT_EXPIRED') {
-        errorMessage = 'Sesi Anda telah berakhir. Silakan login kembali.';
-      } else if (verifyError.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED') {
-        errorMessage = 'Token tidak valid. Silakan login kembali.';
-      }
-      
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { success: false, message: errorMessage, code: 'token_invalid' },
         { 
-          status: 401,
-          headers: {
-            'Cache-Control': 'no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            ...corsHeaders
-          }
-        }
+          success: false, 
+          message: 'Format email tidak valid', 
+          code: 'invalid_email' 
+        },
+        { status: 400, headers: corsHeaders }
       );
     }
     
-    // Get user data from database with error handling
-    let user;
+    // Validate password strength (at least 8 characters)
+    if (password.length < 8) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Password harus minimal 8 karakter', 
+          code: 'weak_password' 
+        },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    
+    // Check if user already exists
     try {
-      console.log('Getting user data for ID:', payload.id);
+      const userExists = await checkUserExists(email);
       
-      // Try to get user by ID
-      user = await getUserById(payload.id);
-      
-      // If failed, try to get by email as fallback
-      if (!user && payload.email) {
-        console.log('User not found by ID, trying by email:', payload.email);
-        user = await getUserByEmail(payload.email);
+      if (userExists) {
+        console.log('Registration failed: Email already exists:', email);
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'Email sudah terdaftar. Silakan gunakan email lain atau login.', 
+            code: 'email_exists' 
+          },
+          { status: 409, headers: corsHeaders }
+        );
       }
-      
-      console.log('User data retrieved:', user ? 'Success' : 'Not found');
     } catch (dbError) {
-      console.error('Database error when fetching user:', dbError);
+      console.error('Database error when checking existing user:', dbError);
       return NextResponse.json(
-        { success: false, message: 'Gagal mengambil data pengguna', code: 'database_error' },
+        { 
+          success: false, 
+          message: 'Terjadi kesalahan saat memeriksa email', 
+          code: 'database_error' 
+        },
         { status: 500, headers: corsHeaders }
       );
     }
     
-    if (!user) {
-      console.log('User not found for ID:', payload.id);
+    // No need to hash password here as it's done in createUser
+    
+    // Create new user
+    let newUser;
+    try {
+      newUser = await createUser({
+        name,
+        email,
+        password,
+        // Status and createdAt are handled in the createUser function
+      });
+      
+      console.log('User created successfully:', newUser._id);
+    } catch (createError) {
+      console.error('Error creating user:', createError);
       return NextResponse.json(
-        { success: false, message: 'User tidak ditemukan', code: 'user_not_found' },
-        { status: 404, headers: corsHeaders }
+        { 
+          success: false, 
+          message: 'Gagal membuat akun. Silakan coba lagi.', 
+          code: 'create_error' 
+        },
+        { status: 500, headers: corsHeaders }
       );
     }
     
-    // Check if account is disabled
-    if (user.status === 'disabled' || user.status === 'suspended') {
-      console.log('Account is disabled/suspended:', user._id);
-      return NextResponse.json(
-        { success: false, message: 'Akun tidak aktif', code: 'account_inactive' },
-        { status: 403, headers: corsHeaders }
-      );
+    // Generate JWT token
+    let token;
+    try {
+      // Convert MongoDB ObjectId to string if needed
+      const userId = newUser._id.toString ? newUser._id.toString() : newUser._id;
+      
+      token = await new SignJWT({ 
+        id: userId,
+        email: newUser.email,
+        name: newUser.name,
+        iat: Math.floor(Date.now() / 1000)
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('7d')
+        .sign(getSecretKey());
+      
+      console.log('JWT token generated for user:', newUser._id);
+    } catch (tokenError) {
+      console.error('Error generating token:', tokenError);
+      // We'll continue without a token
+      // User can still login later
     }
     
-    // Check if token needs refresh (if it's set to expire within 15 minutes)
-    const currentTime = Math.floor(Date.now() / 1000);
-    const needsRefresh = payload.exp && currentTime >= (payload.exp - 15 * 60);
-    
-    let refreshedToken = null;
-    
-    // Create new token if refresh is needed
-    if (needsRefresh) {
-      try {
-        console.log('Refreshing token for user:', user._id);
-        refreshedToken = await refreshToken(user);
-      } catch (refreshError) {
-        console.error('Token refresh error:', refreshError);
-        // Continue without refreshed token
-      }
-    }
-    
-    console.log('Creating successful response for user:', user._id);
-    
-    // Create response with user data
+    // Create response
     const response = NextResponse.json({
       success: true,
+      message: 'Registrasi berhasil',
       user: {
-        id: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        // Add any other non-sensitive user data here that frontend needs
-        ...(user.lastLoginAt && { lastLogin: user.lastLoginAt }),
-        ...(user.avatar && { avatar: user.avatar }),
-        ...(user.role && { role: user.role }),
+        id: newUser._id.toString(),
+        name: newUser.name,
+        email: newUser.email
       },
-      tokenRefreshed: !!refreshedToken
+      ...(token && { token }) // Only include token if generated successfully
     }, { headers: corsHeaders });
     
-    // If token was refreshed, update the cookie
-    if (refreshedToken) {
-      console.log('Setting refreshed token in cookie');
+    // Set auth cookie if token was generated
+    if (token) {
       response.cookies.set({
         name: 'auth-token',
-        value: refreshedToken,
+        value: token,
         httpOnly: true,
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/',
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax'
       });
-      
-      // Also include the new token in the response for API clients
-      response._json.token = refreshedToken;
     }
     
     // Add security headers
@@ -230,36 +194,16 @@ export async function GET(request) {
       response.headers.set(key, value);
     });
     
-    console.log('Auth verification successful for user:', user._id);
     return response;
   } catch (error) {
-    console.error('Auth verification error:', error);
+    console.error('Registration error:', error);
     return NextResponse.json(
       { 
         success: false, 
-        message: 'Terjadi kesalahan saat verifikasi', 
-        code: 'server_error'
+        message: 'Terjadi kesalahan saat registrasi', 
+        code: 'server_error' 
       },
       { status: 500, headers: corsHeaders }
     );
   }
-}
-
-/**
- * Helper function to refresh token
- * @param {Object} user - User data
- * @returns {Promise<string>} New JWT token
- */
-async function refreshToken(user) {
-  return new SignJWT({ 
-    id: user._id.toString(),
-    email: user.email,
-    name: user.name,
-    // Add timestamp for additional security
-    iat: Math.floor(Date.now() / 1000)
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('7d')
-    .sign(getSecretKey());
 }
