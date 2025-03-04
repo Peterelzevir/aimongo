@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiRefreshCw, FiShare2, FiMic, FiMessageSquare, FiMenu, 
   FiX, FiMaximize, FiMinimize, FiDownload, FiSettings, 
-  FiSearch, FiInfo, FiUser, FiLogOut, FiChevronDown
+  FiSearch, FiInfo
 } from 'react-icons/fi';
 import ChatHistory from './ChatHistory';
 import ChatInput from './ChatInput';
@@ -14,56 +14,19 @@ import ChatSidebar from './ChatSidebar';
 import ChatExportModal from './ChatExportModal';
 import ThemeSwitch from '@/components/ui/ThemeSwitch';
 import { useChatContext } from '@/context/ChatContext';
-import { useAuth } from '@/context/AuthContext';
 import { saveConversationForSharing } from '@/lib/api';
 import Image from 'next/image';
 
-export default function ChatInterface({ onReady }) {
-  // Context initialization state
-  const [isContextReady, setIsContextReady] = useState(false);
-  
-  // Tambahkan pengecekan nilai context yang null/undefined
-  const chatContext = useChatContext();
-  const authContext = useAuth();
-  
-  // Notify parent when component is ready
-  useEffect(() => {
-    if (chatContext && !isContextReady) {
-      setIsContextReady(true);
-      if (onReady && typeof onReady === 'function') {
-        // Small delay to ensure UI is rendered
-        const timer = setTimeout(() => {
-          onReady();
-        }, 100);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [chatContext, isContextReady, onReady]);
-  
-  // Jika context tidak tersedia, tampilkan UI loading
-  if (!chatContext || !authContext) {
-    return (
-      <div className="flex items-center justify-center h-screen text-primary-200">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400 mx-auto mb-4"></div>
-          <p>Loading chat resources...</p>
-        </div>
-      </div>
-    );
-  }
-  
-  // Destructure hanya setelah memastikan context ada
+export default function ChatInterface() {
   const {
-    messages = [],
-    isProcessing = false,
-    isVoiceMode = false,
-    conversationId = '',
-    clearConversation = () => {},
-    toggleVoiceMode = () => {},
-    generateShareableLink = () => '',
-  } = chatContext;
-  
-  const { user = null, logout = () => {} } = authContext;
+    messages,
+    isProcessing,
+    isVoiceMode,
+    conversationId,
+    clearConversation,
+    toggleVoiceMode,
+    generateShareableLink,
+  } = useChatContext();
   
   // UI States
   const [shareUrl, setShareUrl] = useState('');
@@ -75,10 +38,8 @@ export default function ChatInterface({ onReady }) {
   const [showSearchBox, setShowSearchBox] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showInfoPanel, setShowInfoPanel] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
   
   const chatContainerRef = useRef(null);
-  const userDropdownRef = useRef(null);
 
   // Check if we're on mobile & listen for resize
   useEffect(() => {
@@ -94,24 +55,9 @@ export default function ChatInterface({ onReady }) {
     };
   }, []);
 
-  // Close user dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
-        setShowUserDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
   // Scroll to bottom when messages change
   useEffect(() => {
-    // Tambahkan pengecekan untuk messages
-    if (chatContainerRef.current && messages && messages.length > 0) {
+    if (chatContainerRef.current) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
       chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
@@ -161,22 +107,11 @@ export default function ChatInterface({ onReady }) {
   };
   
   // Filter messages based on search
-  const filteredMessages = messages && searchQuery.trim() 
+  const filteredMessages = searchQuery.trim() 
     ? messages.filter(msg => 
         msg.content.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : messages || [];
-
-  // Handle logout
-  const handleLogout = async () => {
-    await logout();
-    // Redirect happens in the logout function
-  };
-
-  // Get first letter of name for avatar
-  const getInitial = () => {
-    return user?.name ? user.name.charAt(0).toUpperCase() : 'U';
-  };
+    : messages;
 
   // Chat container classes
   const containerClasses = `
@@ -192,7 +127,6 @@ export default function ChatInterface({ onReady }) {
         isOpen={showSidebar} 
         toggleSidebar={toggleSidebar} 
         isMobile={isMobile} 
-        user={user}
       />
       
       <div className={containerClasses}>
@@ -226,11 +160,7 @@ export default function ChatInterface({ onReady }) {
               <div className="overflow-hidden">
                 <div className="text-primary-50 font-medium text-sm md:text-base truncate">AI Peter</div>
                 <div className="text-xs text-primary-300 flex items-center">
-                  <span className="relative flex w-2 h-2 mr-1">
-                    <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
-                  Online
+                  <span className="w-2 h-2 rounded-full bg-green-400 mr-1"></span> Online
                 </div>
               </div>
             </div>
@@ -238,52 +168,6 @@ export default function ChatInterface({ onReady }) {
           
           {/* Controls */}
           <div className="flex items-center gap-1">
-            {/* User profile dropdown */}
-            <div className="relative mr-2" ref={userDropdownRef}>
-              <button
-                onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center bg-primary-700/50 hover:bg-primary-700 p-1.5 px-3 rounded-lg transition-colors"
-              >
-                <div className="w-6 h-6 rounded-full bg-accent/70 text-white flex items-center justify-center text-xs font-medium mr-2">
-                  {getInitial()}
-                </div>
-                <span className="text-primary-200 text-sm hidden sm:block max-w-[100px] truncate">
-                  {user?.name || 'User'}
-                </span>
-                <FiChevronDown 
-                  size={16} 
-                  className={`ml-1 text-primary-400 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`}
-                />
-              </button>
-              
-              <AnimatePresence>
-                {showUserDropdown && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-full mt-1 bg-primary-800 border border-primary-700 rounded-md shadow-lg z-50 w-52 overflow-hidden"
-                  >
-                    <div className="py-1">
-                      <div className="px-4 py-2 border-b border-primary-700">
-                        <div className="text-primary-50 font-medium truncate">{user?.name}</div>
-                        <div className="text-primary-400 text-xs truncate">{user?.email}</div>
-                      </div>
-                      
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center w-full px-4 py-2.5 text-sm text-primary-200 hover:bg-primary-700 hover:text-primary-50 transition-colors"
-                      >
-                        <FiLogOut size={16} className="mr-3 text-primary-400" />
-                        Logout
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            
             {/* Search Toggle */}
             <button
               onClick={() => setShowSearchBox(!showSearchBox)}
@@ -372,22 +256,6 @@ export default function ChatInterface({ onReady }) {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Database badge - MongoDB */}
-        <div className="px-3 py-1 bg-gradient-to-r from-green-900/20 to-primary-800 border-b border-primary-600">
-          <div className="flex justify-end items-center">
-            <div className="flex items-center px-1.5 py-0.5 rounded-sm bg-primary-700/30">
-              <div className="bg-green-500/20 p-0.5 rounded-sm mr-1">
-                <svg viewBox="0 0 16 16" width="10" height="10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 1C4.32 1 1.33 4.29 1.33 8.35C1.33 12.41 4.32 15.7 8 15.7C11.68 15.7 14.67 12.41 14.67 8.35C14.67 4.29 11.68 1 8 1ZM8 14.37C5.05 14.37 2.65 11.65 2.65 8.35C2.65 5.05 5.05 2.33 8 2.33C10.95 2.33 13.35 5.05 13.35 8.35C13.35 11.65 10.95 14.37 8 14.37Z" fill="#4CAF50"/>
-                  <path d="M8 7.02C6.9 7.02 6 6.12 6 5.02C6 3.92 6.9 3.02 8 3.02C9.1 3.02 10 3.92 10 5.02C10 6.12 9.1 7.02 8 7.02Z" fill="#4CAF50"/>
-                  <path d="M8 12.7C9.7 12.7 11 11.4 11 9.7V8.3C11 8.1 10.9 8 10.7 8H5.3C5.1 8 5 8.1 5 8.3V9.7C5 11.4 6.3 12.7 8 12.7Z" fill="#4CAF50"/>
-                </svg>
-              </div>
-              <span className="text-[10px] text-green-500">MongoDB</span>
             </div>
           </div>
         </div>
@@ -485,15 +353,6 @@ export default function ChatInterface({ onReady }) {
                         <li>Write code with triple backticks for syntax highlighting</li>
                       </ul>
                     </div>
-                    
-                    {/* Database info */}
-                    <div className="bg-primary-700/30 p-2 rounded-md mt-4 text-xs">
-                      <p className="flex items-center mb-1">
-                        <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                        <span className="text-green-300">MongoDB Atlas</span>
-                      </p>
-                      <p className="text-primary-400 text-[10px] pl-4">Data securely stored in cloud database</p>
-                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -505,7 +364,7 @@ export default function ChatInterface({ onReady }) {
             ref={chatContainerRef}
             className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4 bg-primary-700"
           >
-            {!filteredMessages || filteredMessages.length === 0 ? (
+            {filteredMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center">
                 {searchQuery ? (
                   <div className="text-center px-4 py-8 rounded-lg bg-primary-800/50">
@@ -522,7 +381,7 @@ export default function ChatInterface({ onReady }) {
                       height={64}
                       className="mx-auto mb-6 opacity-90"
                     />
-                    <h3 className="text-xl text-primary-50 mb-3">Welcome, {user?.name || 'User'}</h3>
+                    <h3 className="text-xl text-primary-50 mb-3">Welcome to AI Peter</h3>
                     <p className="mb-6 text-primary-200">
                       Start by sending a message and I'll respond in real-time with insightful answers.
                     </p>
@@ -547,7 +406,6 @@ export default function ChatInterface({ onReady }) {
                 isProcessing={isProcessing} 
                 isMobile={isMobile} 
                 searchQuery={searchQuery}
-                user={user}
               />
             )}
           </div>
