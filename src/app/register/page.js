@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -51,24 +51,29 @@ export default function RegisterPage() {
     { label: 'Sangat Kuat', color: 'bg-green-600' }
   ];
 
-  // Particles animation setup
-  const totalParticles = 30;
-  const particles = Array.from({ length: totalParticles }).map((_, i) => ({
-    id: i,
-    size: Math.random() * 3 + 1,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    duration: Math.random() * 20 + 10
-  }));
+  // Particles animation setup - using useMemo untuk mencegah regenerasi
+  const particles = useMemo(() => {
+    const totalParticles = 30;
+    return Array.from({ length: totalParticles }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 3 + 1,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      duration: Math.random() * 20 + 10,
+      delay: Math.random() * 20 // tambahkan delay sebagai properti
+    }));
+  }, []);
 
-  // Floating bubbles for the animation
-  const bubbles = Array.from({ length: 5 }).map((_, i) => ({
-    id: i,
-    size: Math.random() * 80 + 40,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    duration: Math.random() * 30 + 15
-  }));
+  // Floating bubbles for the animation - using useMemo untuk mencegah regenerasi
+  const bubbles = useMemo(() => {
+    return Array.from({ length: 5 }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 80 + 40,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      duration: Math.random() * 30 + 15
+    }));
+  }, []);
 
   const nextStep = () => {
     if (step === 1) {
@@ -297,15 +302,16 @@ export default function RegisterPage() {
               top: `${particle.y}%`,
             }}
             animate={{
-              y: [0, -500, 0],
+              y: -500,
               opacity: [0, 0.8, 0],
             }}
+            initial={{ y: 0, opacity: 0 }}
             transition={{
               duration: particle.duration,
               repeat: Infinity,
               repeatType: "loop",
               ease: "linear",
-              delay: Math.random() * 20
+              delay: particle.delay
             }}
           />
         ))}
@@ -321,15 +327,16 @@ export default function RegisterPage() {
               left: `${bubble.x}%`,
               top: `${bubble.y}%`,
             }}
+            initial={{ x: 0, y: 0, scale: 1 }}
             animate={{
-              x: [0, 20, 0, -20, 0],
-              y: [0, -20, 0, 20, 0],
-              scale: [1, 1.05, 1, 0.95, 1],
+              x: 20,
+              y: -20,
+              scale: 1.05,
             }}
             transition={{
               duration: bubble.duration,
               repeat: Infinity,
-              repeatType: "loop",
+              repeatType: "reverse",
               ease: "easeInOut",
             }}
           />
@@ -353,7 +360,7 @@ export default function RegisterPage() {
         
         <div className="w-full max-w-md">
           {/* Registration success animation */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {registerSuccess ? (
               <motion.div
                 initial={{ scale: 0, opacity: 0 }}
@@ -364,17 +371,12 @@ export default function RegisterPage() {
               >
                 <motion.div 
                   initial={{ scale: 0 }}
-                  animate={{ 
-                    scale: [0, 1.2, 1],
-                    rotate: [0, 10, 0]
-                  }}
-                  transition={{ duration: 0.8, times: [0, 0.7, 1] }}
+                  animate={{ scale: 1.2 }}
+                  transition={{ duration: 0.8 }}
                   className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mb-4"
                 >
                   <motion.div
-                    animate={{
-                      scale: [1, 1.2, 1]
-                    }}
+                    animate={{ scale: 1.2 }}
                     transition={{
                       duration: 1.5,
                       repeat: Infinity,
@@ -387,24 +389,19 @@ export default function RegisterPage() {
                 <h2 className="text-2xl font-bold text-primary-50 mb-2">Pendaftaran Berhasil!</h2>
                 <p className="text-primary-300 text-center">Akun Anda telah dibuat. Mengalihkan ke halaman chat...</p>
                 
-                {/* Confetti effect */}
-                {Array.from({ length: 50 }).map((_, i) => (
+                {/* Confetti effect - simplified untuk menghindari error */}
+                {Array.from({ length: 20 }).map((_, i) => (
                   <motion.div
                     key={`confetti-${i}`}
-                    initial={{ 
-                      x: 0, 
-                      y: 0,
-                      opacity: 1,
-                      scale: 0
-                    }}
+                    initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
                     animate={{ 
-                      x: Math.random() * 500 * (Math.random() > 0.5 ? 1 : -1), 
-                      y: Math.random() * 500,
-                      opacity: [1, 1, 0],
-                      scale: [0, 1, 1],
-                      rotate: Math.random() * 360
+                      x: (Math.random() > 0.5 ? 300 : -300), 
+                      y: 300,
+                      opacity: 0,
+                      scale: 1,
+                      rotate: 360
                     }}
-                    transition={{ duration: 1.5 + Math.random() }}
+                    transition={{ duration: 1.5 }}
                     className={`absolute w-2 ${Math.random() > 0.5 ? 'h-4' : 'h-6'} rounded-sm ${
                       ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'][Math.floor(Math.random() * 6)]
                     }`}
@@ -823,17 +820,17 @@ export default function RegisterPage() {
           {/* Decorative elements */}
           <motion.div 
             className="absolute -bottom-10 -right-10 w-64 h-64 rounded-full bg-accent/5 blur-3xl"
-            animate={{ 
-              scale: [1, 1.2, 1],
-              opacity: [0.5, 0.7, 0.5] 
-            }}
+            animate={{ scale: 1.2, opacity: 0.7 }}
+            initial={{ scale: 1, opacity: 0.5 }}
             transition={{ 
               duration: 15, 
               repeat: Infinity,
-              repeatType: "reverse" 
+              repeatType: "reverse",
+              ease: "easeInOut"
             }}
           />
         </div>
       </div>
     </div>
   );
+}
