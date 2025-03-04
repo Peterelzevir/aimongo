@@ -22,16 +22,52 @@ export default function RegisterPage() {
   const [registerSuccess, setRegisterSuccess] = useState(false);
   const [step, setStep] = useState(1);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   
   const router = useRouter();
   const { register, isAuthenticated, login } = useAuth() || {}; // Add fallback empty object
 
-  // Redirect if already logged in
+  // Redirect if already logged in with proper error handling
   useEffect(() => {
-    if (isAuthenticated && isAuthenticated()) {
-      router.push('/chat');
-    }
-  }, [isAuthenticated, router]);
+    const checkAuthStatus = async () => {
+      setIsCheckingAuth(true);
+      try {
+        // First check if isAuthenticated is a function
+        if (typeof isAuthenticated === 'function') {
+          try {
+            const authStatus = await Promise.resolve(isAuthenticated());
+            if (authStatus) {
+              router.push('/chat');
+              return;
+            }
+          } catch (authError) {
+            console.error('Error checking authentication status:', authError);
+            // Continue to show register page on auth check error
+          }
+        } 
+        
+        // Alternative method: check localStorage or sessionStorage
+        try {
+          const userLoggedIn = sessionStorage.getItem('userLoggedIn') === 'true';
+          const authToken = localStorage.getItem('authToken');
+          if (userLoggedIn || authToken) {
+            router.push('/chat');
+            return;
+          }
+        } catch (storageError) {
+          console.error('Error accessing storage:', storageError);
+          // Continue to show register page on storage error
+        }
+      } catch (err) {
+        console.error('General error in auth check:', err);
+        // Continue to show register page on error
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuthStatus();
+  }, [router, isAuthenticated]);
 
   // Password strength validation
   const passwordStrength = {
@@ -51,7 +87,7 @@ export default function RegisterPage() {
     { label: 'Sangat Kuat', color: 'bg-green-600' }
   ];
 
-  // Particles animation setup - using useMemo untuk mencegah regenerasi
+  // Particles animation setup - using useMemo to prevent regeneration
   const particles = useMemo(() => {
     const totalParticles = 30;
     return Array.from({ length: totalParticles }).map((_, i) => ({
@@ -60,11 +96,11 @@ export default function RegisterPage() {
       x: Math.random() * 100,
       y: Math.random() * 100,
       duration: Math.random() * 20 + 10,
-      delay: Math.random() * 20 // tambahkan delay sebagai properti
+      delay: Math.random() * 20 // add delay property
     }));
   }, []);
 
-  // Floating bubbles for the animation - using useMemo untuk mencegah regenerasi
+  // Floating bubbles for the animation - using useMemo to prevent regeneration
   const bubbles = useMemo(() => {
     return Array.from({ length: 5 }).map((_, i) => ({
       id: i,
@@ -159,22 +195,30 @@ export default function RegisterPage() {
         throw new Error(errorMessage);
       }
       
-      // If successful and token is available
+      // If successful and token is available, store it consistently
       if (data.token) {
-        // Store token if needed
-        if (typeof window !== 'undefined') {
+        try {
           localStorage.setItem('authToken', data.token);
           sessionStorage.setItem('userLoggedIn', 'true');
-        }
-        
-        // Use login from context if available (for auto-login)
-        if (typeof login === 'function') {
-          try {
-            await login(userData.email, userData.password);
-          } catch (loginError) {
-            console.warn('Auto-login after registration failed:', loginError);
-            // Continue even if auto-login fails
+          
+          // Save user data in sessionStorage to be accessible throughout the app
+          if (data.user) {
+            sessionStorage.setItem('user', JSON.stringify({
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.name,
+            }));
           }
+        } catch (storageError) {
+          console.warn('Failed to store auth data in storage:', storageError);
+          // Continue even if storage fails
+        }
+      } else {
+        // Even if no token, set user as logged in for this session
+        try {
+          sessionStorage.setItem('userLoggedIn', 'true');
+        } catch (storageError) {
+          console.warn('Failed to set session flag:', storageError);
         }
       }
       
@@ -189,11 +233,11 @@ export default function RegisterPage() {
       // More specific error message
       let errorMessage = 'Terjadi kesalahan saat mendaftar';
       
-      if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('Network')) {
         errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
-      } else if (error.message.includes('409') || error.message.toLowerCase().includes('conflict')) {
+      } else if (error.message?.includes('409') || error.message?.toLowerCase().includes('conflict')) {
         errorMessage = 'Email sudah terdaftar. Silakan gunakan email lain.';
-      } else if (error.message.includes('400')) {
+      } else if (error.message?.includes('400')) {
         errorMessage = 'Format permintaan tidak valid. Pastikan data yang dimasukkan benar.';
       }
       
@@ -202,6 +246,22 @@ export default function RegisterPage() {
         error: error.message || errorMessage
       };
     }
+  };
+
+  // Auto-login after registration - separated for better error handling
+  const autoLoginAfterRegistration = async (email, password) => {
+    if (typeof login === 'function') {
+      try {
+        console.log('Attempting auto-login after registration');
+        await Promise.resolve(login(email, password));
+        return true;
+      } catch (loginError) {
+        console.warn('Auto-login after registration failed:', loginError);
+        // Continue even if auto-login fails
+        return false;
+      }
+    }
+    return false;
   };
 
   const handleSubmit = async (e) => {
@@ -242,18 +302,26 @@ export default function RegisterPage() {
         password
       };
       
-      // Try to use register from AuthContext if available
       let result;
       
+      // First try to use register from AuthContext if available
       if (typeof register === 'function') {
         try {
-          result = await register(userData);
+          console.log('Attempting registration via AuthContext');
+          result = await Promise.resolve(register(userData));
+          
+          // Check if the result is valid
+          if (typeof result !== 'object') {
+            console.warn('Context register returned invalid response, using direct API');
+            result = await registerWithAPI(userData);
+          }
         } catch (contextError) {
           console.warn('Context register failed, using direct API', contextError);
           result = await registerWithAPI(userData);
         }
       } else {
         // If register is not available in context, use direct API call
+        console.log('No register method in context, using direct API');
         result = await registerWithAPI(userData);
       }
       
@@ -262,6 +330,22 @@ export default function RegisterPage() {
         setIsLoading(false);
         return;
       }
+      
+      // Set session flag regardless of context result
+      try {
+        sessionStorage.setItem('userLoggedIn', 'true');
+      } catch (storageError) {
+        console.warn('Failed to set session flag:', storageError);
+      }
+      
+      // Try auto-login in background, but don't wait for it
+      autoLoginAfterRegistration(userData.email, userData.password)
+        .then(success => {
+          console.log('Auto-login result:', success ? 'successful' : 'failed');
+        })
+        .catch(err => {
+          console.warn('Error in auto-login process:', err);
+        });
       
       // Show success animation
       setRegisterSuccess(true);
@@ -275,7 +359,13 @@ export default function RegisterPage() {
       
       // Redirect after success animation
       setTimeout(() => {
-        router.push('/chat');
+        try {
+          router.push('/chat');
+        } catch (navigationError) {
+          console.error('Error navigating to chat:', navigationError);
+          // Fallback - hard navigation
+          window.location.href = '/chat';
+        }
       }, 2000);
       
     } catch (err) {
@@ -285,11 +375,22 @@ export default function RegisterPage() {
     }
   };
 
+  // Show loading screen while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-primary-900">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-primary-300">Memeriksa status login...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden bg-primary-900 relative">
       {/* Animated background particles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
+        {/* Fixed possible undefined class error */}
+        <div className="absolute inset-0 opacity-5"></div>
         
         {particles.map((particle) => (
           <motion.div
@@ -389,7 +490,7 @@ export default function RegisterPage() {
                 <h2 className="text-2xl font-bold text-primary-50 mb-2">Pendaftaran Berhasil!</h2>
                 <p className="text-primary-300 text-center">Akun Anda telah dibuat. Mengalihkan ke halaman chat...</p>
                 
-                {/* Confetti effect - simplified untuk menghindari error */}
+                {/* Confetti effect - simplified to avoid errors */}
                 {Array.from({ length: 20 }).map((_, i) => (
                   <motion.div
                     key={`confetti-${i}`}
@@ -766,13 +867,20 @@ export default function RegisterPage() {
               className="relative"
             >
               <div className="absolute -inset-4 rounded-full bg-accent/20 blur-xl"></div>
-              <Image 
-                src="/images/logo.svg" 
-                alt="AI Peter Logo"
-                width={100}
-                height={100}
-                className="relative z-10"
-              />
+              {/* Image component with error handling */}
+              <div className="relative z-10 w-[100px] h-[100px] flex items-center justify-center">
+                <Image 
+                  src="/images/logo.svg" 
+                  alt="AI Peter Logo"
+                  width={100}
+                  height={100}
+                  onError={(e) => {
+                    // Fallback if image fails to load
+                    e.target.onerror = null;
+                    e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%234B5563'/%3E%3Ctext x='50%' y='50%' font-size='20' text-anchor='middle' fill='white' dominant-baseline='middle'%3ELogo%3C/text%3E%3C/svg%3E";
+                  }}
+                />
+              </div>
             </motion.div>
             
             <motion.h2 
