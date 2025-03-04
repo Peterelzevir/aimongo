@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { 
   FiMail, FiLock, FiEye, FiEyeOff, FiAlertCircle, 
-  FiArrowLeft, FiUser, FiCheck, FiX
+  FiArrowLeft, FiCheck, FiX
 } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 
@@ -30,7 +30,7 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router]);
 
-  // Particles animation - using useMemo to prevent recreating on each render
+  // Particles animation - predefined untuk menghindari regenerasi
   const particles = useMemo(() => {
     const totalParticles = 30;
     return Array.from({ length: totalParticles }).map((_, i) => ({
@@ -226,28 +226,21 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden bg-primary-900 relative">
-      {/* Animated background particles - FIXED simplified animation */}
+      {/* Animated background particles - FIXED animation dengan CSS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         
         {particles.map((particle) => (
-          <motion.div
+          <div
             key={particle.id}
-            className="absolute rounded-full bg-accent/20"
+            className="absolute rounded-full bg-accent/20 animate-float"
             style={{
               width: particle.size,
               height: particle.size,
               left: `${particle.x}%`,
               top: `${particle.y}%`,
-            }}
-            initial={{ y: 0, opacity: 0 }}
-            animate={{ y: -500, opacity: [0, 0.8, 0] }}
-            transition={{
-              duration: particle.duration,
-              repeat: Infinity,
-              repeatType: "loop",
-              ease: "linear",
-              delay: particle.delay
+              animationDuration: `${particle.duration}s`,
+              animationDelay: `${particle.delay}s`
             }}
           />
         ))}
@@ -256,18 +249,11 @@ export default function LoginPage() {
       {/* Left Panel - Decorative for larger screens */}
       <div className="hidden md:flex md:w-2/5 bg-primary-800/40 backdrop-blur-sm relative overflow-hidden">
         <div className="absolute inset-0">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1 }}
-            className="absolute inset-0 flex flex-col items-center justify-center p-10"
+          <div 
+            className="absolute inset-0 flex flex-col items-center justify-center p-10 opacity-0 animate-fadeIn"
+            style={{animationDelay: "0.2s", animationFillMode: "forwards"}}
           >
-            <motion.div 
-              initial={{ y: -20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.8 }}
-              className="relative"
-            >
+            <div className="relative animate-slideDown" style={{animationDelay: "0.5s"}}>
               <div className="absolute -inset-4 rounded-full bg-accent/20 blur-xl"></div>
               <Image 
                 src="/images/logo.svg" 
@@ -276,25 +262,21 @@ export default function LoginPage() {
                 height={100}
                 className="relative z-10"
               />
-            </motion.div>
+            </div>
             
-            <motion.h2 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.7, duration: 0.8 }}
-              className="mt-6 text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary-50 to-accent"
+            <h2 
+              className="mt-6 text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary-50 to-accent animate-slideDown"
+              style={{animationDelay: "0.7s"}}
             >
               AI Peter
-            </motion.h2>
+            </h2>
             
-            <motion.p 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.9, duration: 0.8 }}
-              className="mt-2 text-primary-300 text-center max-w-xs"
+            <p 
+              className="mt-2 text-primary-300 text-center max-w-xs animate-slideDown"
+              style={{animationDelay: "0.9s"}}
             >
               Asisten AI super modern yang dapat membantu tugas-tugas Anda dengan cerdas dan efisien
-            </motion.p>
+            </p>
             
             <div className="mt-10 space-y-6 w-full max-w-xs">
               {/* Feature bullets */}
@@ -304,33 +286,24 @@ export default function LoginPage() {
                 "Bantuan 24/7 untuk semua kebutuhan",
                 "Kemampuan memahami konteks percakapan"
               ].map((feature, i) => (
-                <motion.div 
+                <div 
                   key={i}
-                  initial={{ x: -50, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 1.1 + (i * 0.2), duration: 0.5 }}
-                  className="flex items-center"
+                  className="flex items-center animate-slideRight"
+                  style={{animationDelay: `${1.1 + (i * 0.2)}s`}}
                 >
                   <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center mr-3">
                     <FiCheck className="text-accent" />
                   </div>
                   <p className="text-primary-200">{feature}</p>
-                </motion.div>
+                </div>
               ))}
             </div>
-          </motion.div>
+          </div>
           
-          {/* Decorative elements - FIXED animation */}
-          <motion.div 
-            className="absolute -bottom-10 -right-10 w-64 h-64 rounded-full bg-accent/5 blur-3xl"
-            initial={{ scale: 1, opacity: 0.5 }}
-            animate={{ scale: 1.2, opacity: 0.7 }}
-            transition={{ 
-              duration: 15, 
-              repeat: Infinity,
-              repeatType: "reverse",
-              ease: "easeInOut" 
-            }}
+          {/* Decorative elements - CSS animation */}
+          <div 
+            className="absolute -bottom-10 -right-10 w-64 h-64 rounded-full bg-accent/5 blur-3xl animate-pulse"
+            style={{animationDuration: "15s"}}
           />
         </div>
       </div>
@@ -338,45 +311,31 @@ export default function LoginPage() {
       {/* Right Panel - Login Form */}
       <div className="flex-1 flex flex-col justify-center items-center p-6 relative">
         {/* Back to home link */}
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-          className="absolute top-6 left-6"
+        <div 
+          className="absolute top-6 left-6 opacity-0 animate-fadeIn"
+          style={{animationDelay: "0.2s", animationFillMode: "forwards"}}
         >
           <Link href="/" className="flex items-center text-primary-300 hover:text-primary-200 gap-1 transition-colors">
             <FiArrowLeft size={16} />
             <span>Kembali ke beranda</span>
           </Link>
-        </motion.div>
+        </div>
         
         <div className="w-full max-w-md">
           {/* Login success animation */}
           {loginSuccess ? (
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 0.5, type: "spring" }}
-              className="mb-10 flex flex-col items-center"
-            >
-              <motion.div 
-                initial={{ scale: 0 }}
-                animate={{ scale: 1.2 }}
-                transition={{ duration: 0.6 }}
-                className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-4"
+            <div className="mb-10 flex flex-col items-center animate-scaleIn">
+              <div 
+                className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-4 animate-scaleIn"
+                style={{animationDuration: "0.6s"}}
               >
                 <FiCheck className="text-green-500" size={40} />
-              </motion.div>
+              </div>
               <h2 className="text-2xl font-bold text-primary-50 mb-2">Login Berhasil!</h2>
               <p className="text-primary-300 text-center">Mengalihkan ke halaman chat...</p>
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
+            <div className="animate-fadeIn" style={{animationDuration: "0.5s"}}>
               {/* Login header */}
               <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold text-primary-50 mb-2">Login</h1>
@@ -386,18 +345,13 @@ export default function LoginPage() {
               </div>
               
               {/* Login form */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-                className="bg-primary-800/40 backdrop-blur-sm border border-primary-700/50 rounded-xl p-6 shadow-xl"
+              <div
+                className="bg-primary-800/40 backdrop-blur-sm border border-primary-700/50 rounded-xl p-6 shadow-xl animate-fadeIn"
+                style={{animationDelay: "0.2s", animationDuration: "0.5s"}}
               >
                 {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center text-red-300 text-sm"
+                  <div 
+                    className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center text-red-300 text-sm animate-fadeIn"
                   >
                     <FiAlertCircle className="flex-shrink-0 mr-2" size={18} />
                     <span>{error}</span>
@@ -407,7 +361,7 @@ export default function LoginPage() {
                     >
                       <FiX size={16} />
                     </button>
-                  </motion.div>
+                  </div>
                 )}
                 
                 <form onSubmit={handleSubmit}>
@@ -486,11 +440,9 @@ export default function LoginPage() {
                     
                     {/* Submit Button */}
                     <div className="pt-2">
-                      <motion.button
+                      <button
                         type="submit"
                         disabled={isLoading}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
                         className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-accent hover:bg-accent-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all
                         ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
@@ -503,18 +455,16 @@ export default function LoginPage() {
                             Processing...
                           </>
                         ) : 'Login'}
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
                 </form>
-              </motion.div>
+              </div>
               
               {/* Register link */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4, duration: 0.5 }}
-                className="mt-6 text-center"
+              <div
+                className="mt-6 text-center opacity-0 animate-fadeIn"
+                style={{animationDelay: "0.4s", animationFillMode: "forwards"}}
               >
                 <p className="text-primary-300">
                   Belum punya akun?{' '}
@@ -522,8 +472,8 @@ export default function LoginPage() {
                     Daftar sekarang
                   </Link>
                 </p>
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           )}
         </div>
       </div>
