@@ -24,11 +24,11 @@ export default function RegisterPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   
   const router = useRouter();
-  const { register, isAuthenticated, login } = useAuth();
+  const { register, isAuthenticated, login } = useAuth() || {}; // Add fallback empty object
 
-  // Redirect jika sudah login
+  // Redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated()) {
+    if (isAuthenticated && isAuthenticated()) {
       router.push('/chat');
     }
   }, [isAuthenticated, router]);
@@ -98,7 +98,7 @@ export default function RegisterPage() {
   // Direct API registration function that matches the API route implementation
   const registerWithAPI = async (userData) => {
     try {
-      // Validasi input data
+      // Validate input data
       if (!userData?.email || !userData?.password || !userData?.name) {
         return { 
           success: false, 
@@ -106,28 +106,28 @@ export default function RegisterPage() {
         };
       }
 
-      // Format body request dengan konsisten
+      // Format body request consistently
       const requestBody = {
         name: userData.name.trim(),
-        email: userData.email.trim().toLowerCase(), // Normalisasi email
+        email: userData.email.trim().toLowerCase(), // Normalize email
         password: userData.password
       };
 
-      // Request dengan header yang jelas
+      // Request with clear headers
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest', // Identifikasi AJAX request
-          'Cache-Control': 'no-cache, no-store' // Hindari caching
+          'X-Requested-With': 'XMLHttpRequest', // Identify AJAX request
+          'Cache-Control': 'no-cache, no-store' // Avoid caching
         },
         body: JSON.stringify(requestBody),
-        credentials: 'include', // Pastikan cookie disertakan
-        cache: 'no-store' // Hindari caching
+        credentials: 'include', // Ensure cookies are included
+        cache: 'no-store' // Avoid caching
       });
       
-      // Parse response dengan penanganan error
+      // Parse response with error handling
       let data;
       try {
         data = await response.json();
@@ -139,7 +139,7 @@ export default function RegisterPage() {
         };
       }
       
-      // Periksa apakah request berhasil
+      // Check if request was successful
       if (!response.ok) {
         const errorMessage = data?.message || 
           data?.error || 
@@ -154,19 +154,21 @@ export default function RegisterPage() {
         throw new Error(errorMessage);
       }
       
-      // Jika berhasil dan token tersedia
+      // If successful and token is available
       if (data.token) {
-        // Simpan token jika diperlukan
-        localStorage.setItem('authToken', data.token);
-        sessionStorage.setItem('userLoggedIn', 'true');
+        // Store token if needed
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('authToken', data.token);
+          sessionStorage.setItem('userLoggedIn', 'true');
+        }
         
-        // Gunakan login dari context jika tersedia (untuk auto-login)
+        // Use login from context if available (for auto-login)
         if (typeof login === 'function') {
           try {
             await login(userData.email, userData.password);
           } catch (loginError) {
             console.warn('Auto-login after registration failed:', loginError);
-            // Tetap lanjutkan meskipun auto-login gagal
+            // Continue even if auto-login fails
           }
         }
       }
@@ -179,7 +181,7 @@ export default function RegisterPage() {
     } catch (error) {
       console.error('Registration API error:', error);
       
-      // Pesan error yang lebih spesifik
+      // More specific error message
       let errorMessage = 'Terjadi kesalahan saat mendaftar';
       
       if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
@@ -201,25 +203,25 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     
-    // Validasi second step
+    // Validate second step
     if (!password || !confirmPassword) {
       setError('Mohon lengkapi semua kolom password');
       return;
     }
     
-    // Validasi minimal panjang password
+    // Validate minimum password length
     if (password.length < 6) {
       setError('Password minimal 6 karakter');
       return;
     }
     
-    // Validasi kecocokan password
+    // Validate password match
     if (password !== confirmPassword) {
       setError('Password tidak cocok. Mohon periksa kembali');
       return;
     }
     
-    // Validasi persetujuan syarat dan ketentuan
+    // Validate terms and conditions agreement
     if (!agreedToTerms) {
       setError('Anda harus menyetujui syarat dan ketentuan untuk mendaftar');
       return;
@@ -228,14 +230,14 @@ export default function RegisterPage() {
     try {
       setIsLoading(true);
       
-      // Siapkan data user dengan format yang konsisten
+      // Prepare user data in a consistent format
       const userData = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password
       };
       
-      // Coba gunakan register dari AuthContext jika tersedia
+      // Try to use register from AuthContext if available
       let result;
       
       if (typeof register === 'function') {
@@ -246,7 +248,7 @@ export default function RegisterPage() {
           result = await registerWithAPI(userData);
         }
       } else {
-        // Jika register tidak tersedia di context, gunakan direct API call
+        // If register is not available in context, use direct API call
         result = await registerWithAPI(userData);
       }
       
@@ -256,17 +258,17 @@ export default function RegisterPage() {
         return;
       }
       
-      // Tampilkan animasi sukses
+      // Show success animation
       setRegisterSuccess(true);
       
-      // Log registrasi berhasil (opsional)
+      // Log successful registration (optional)
       console.log('Registration successful', { 
         email: userData.email, 
         name: userData.name,
         timestamp: new Date().toISOString() 
       });
       
-      // Redirect setelah animasi sukses
+      // Redirect after success animation
       setTimeout(() => {
         router.push('/chat');
       }, 2000);
@@ -835,4 +837,3 @@ export default function RegisterPage() {
       </div>
     </div>
   );
-}
