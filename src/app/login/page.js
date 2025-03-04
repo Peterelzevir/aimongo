@@ -21,14 +21,21 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   
   const router = useRouter();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated } = useAuth() || { login: null, isAuthenticated: () => false };
 
-  // Redirect jika sudah login
+  // Redirect jika sudah login - perbaikan dependency array
   useEffect(() => {
-    if (isAuthenticated()) {
-      router.push('/chat');
+    // Guard clause untuk menghindari error
+    if (typeof isAuthenticated !== 'function') return;
+    
+    try {
+      if (isAuthenticated()) {
+        router.push('/chat');
+      }
+    } catch (err) {
+      console.error('Error checking authentication:', err);
     }
-  }, [isAuthenticated, router]);
+  }, [router]); // Menghapus isAuthenticated dari dependency untuk mencegah loop
 
   // Particles animation
   const totalParticles = 30;
@@ -101,11 +108,14 @@ export default function LoginPage() {
       }
       
       // Jika berhasil dan ingin mengingat user, simpan token
-      // Catatan: API sudah mengatur HTTP-only cookie, tetapi kita juga bisa
-      // menyimpan token di localStorage sebagai fallback untuk pengecekan auth di client-side
       if (requestBody.remember && data.token) {
-        localStorage.setItem('authToken', data.token);
-        sessionStorage.setItem('userLoggedIn', 'true'); // Flag tambahan di session storage
+        try {
+          localStorage.setItem('authToken', data.token);
+          sessionStorage.setItem('userLoggedIn', 'true'); // Flag tambahan di session storage
+        } catch (storageError) {
+          console.warn('Failed to store token in localStorage', storageError);
+          // Lanjutkan meskipun gagal menyimpan
+        }
       }
       
       // Simpan data user di sessionStorage agar bisa diakses di seluruh aplikasi
@@ -186,7 +196,14 @@ export default function LoginPage() {
       if (typeof login === 'function') {
         try {
           // Pass the rememberMe flag to the context login if it supports it
-          result = await login(credentials.email, credentials.password, credentials.remember);
+          const contextLoginResult = await login(credentials.email, credentials.password, credentials.remember);
+          
+          // Normalizing result format if context login doesn't return expected structure
+          result = {
+            success: !!contextLoginResult, // Konversi ke boolean jika tidak jelas
+            data: contextLoginResult,
+            error: contextLoginResult?.error || null,
+          };
         } catch (contextError) {
           console.warn('Context login failed, using direct API', contextError);
           // If context login fails, use direct API call as fallback
@@ -225,7 +242,8 @@ export default function LoginPage() {
     <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden bg-primary-900 relative">
       {/* Animated background particles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
+        {/* Menghapus class bg-grid-pattern yang mungkin tidak didefinisikan */}
+        <div className="absolute inset-0 opacity-5"></div>
         
         {particles.map((particle) => (
           <motion.div
@@ -268,13 +286,20 @@ export default function LoginPage() {
               className="relative"
             >
               <div className="absolute -inset-4 rounded-full bg-accent/20 blur-xl"></div>
-              <Image 
-                src="/images/logo.svg" 
-                alt="AI Peter Logo"
-                width={100}
-                height={100}
-                className="relative z-10"
-              />
+              {/* Image component dengan penanganan error */}
+              <div className="relative z-10 w-[100px] h-[100px] flex items-center justify-center">
+                <Image 
+                  src="/images/logo.svg" 
+                  alt="AI Peter Logo"
+                  width={100}
+                  height={100}
+                  onError={(e) => {
+                    // Fallback jika gambar gagal dimuat
+                    e.target.onerror = null;
+                    e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%234B5563'/%3E%3Ctext x='50%' y='50%' font-size='20' text-anchor='middle' fill='white' dominant-baseline='middle'%3ELogo%3C/text%3E%3C/svg%3E";
+                  }}
+                />
+              </div>
             </motion.div>
             
             <motion.h2 
