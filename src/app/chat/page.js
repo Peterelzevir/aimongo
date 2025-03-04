@@ -1,13 +1,135 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiLock, FiAlertTriangle, FiUser, FiX, FiArrowLeft, FiShield, FiInfo, FiRefreshCw } from 'react-icons/fi';
 import Link from 'next/link';
-import ChatInterface from '@/components/chat/ChatInterface';
-import { useAuth } from '@/context/AuthContext';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
+import { useAuth } from '@/context/AuthContext';
+
+// Import ChatInterface component with dynamic loading to prevent SSR issues
+const ChatInterface = dynamic(
+  () => import('@/components/chat/ChatInterface'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-primary-900 to-primary-800">
+        <div className="text-center p-8 bg-primary-800/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 shadow-lg">
+          <div className="relative w-20 h-20 mx-auto mb-4">
+            <div className="absolute inset-0 border-3 border-transparent border-t-accent-light border-b-accent-light rounded-full animate-spin"></div>
+            <div className="absolute inset-3 bg-primary-600 rounded-full flex items-center justify-center overflow-hidden">
+              <Image
+                src="/images/avatar.svg"
+                alt="AI Peter"
+                width={32}
+                height={32}
+                className="scale-125"
+              />
+            </div>
+          </div>
+          <h3 className="text-primary-50 text-lg font-medium mb-2">Mempersiapkan Chat</h3>
+          <p className="text-primary-300 text-sm mb-4">Memuat antarmuka chat...</p>
+          <div className="h-2 bg-primary-700 rounded-full overflow-hidden relative">
+            <motion.div 
+              className="h-full bg-accent"
+              animate={{
+                x: ["-100%", "100%"],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 1.5,
+                ease: "linear"
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+);
+
+// Error boundary component
+function ErrorBoundary({ children }) {
+  const [hasError, setHasError] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Add global error handler
+    const errorHandler = (event) => {
+      console.error('Caught client error:', event.error);
+      setHasError(true);
+    };
+
+    window.addEventListener('error', errorHandler);
+    return () => window.removeEventListener('error', errorHandler);
+  }, []);
+
+  const handleReset = () => {
+    setHasError(false);
+    router.refresh();
+  };
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-primary-900 to-primary-800 p-4">
+        <div className="bg-primary-800/90 backdrop-blur-md border border-primary-700/50 rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+          <div className="h-1.5 bg-gradient-to-r from-red-500 via-accent to-red-500"></div>
+          
+          <div className="p-6 pb-4 border-b border-primary-700/50">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 text-red-500 mr-4">
+                <FiAlertTriangle size={36} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-primary-50">Terjadi Kesalahan</h3>
+                <p className="text-primary-300 text-sm">
+                  Aplikasi mengalami masalah saat memuat
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6">
+            <div className="bg-primary-700/40 border border-primary-600/50 rounded-lg p-4 mb-6">
+              <div className="flex">
+                <FiInfo className="text-primary-300 mt-0.5 mr-3 flex-shrink-0" />
+                <p className="text-primary-200 text-sm">
+                  Terjadi kesalahan saat memuat antarmuka chat. Hal ini mungkin disebabkan oleh masalah koneksi atau kesalahan pada server.
+                </p>
+              </div>
+            </div>
+            
+            <motion.button
+              whileHover={{ scale: 1.03, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleReset}
+              className="w-full py-3 flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-white rounded-lg font-medium transition-all shadow-md shadow-accent/20"
+            >
+              <FiRefreshCw size={18} />
+              Coba Lagi
+            </motion.button>
+            
+            <div className="mt-5 text-center">
+              <motion.button
+                whileHover={{ x: -2 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => router.push('/')}
+                className="text-primary-400 hover:text-primary-200 text-sm flex items-center justify-center mx-auto gap-1.5 group"
+              >
+                <FiArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+                Kembali ke beranda
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+}
 
 export default function ChatPage() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -16,10 +138,11 @@ export default function ChatPage() {
   const [countdown, setCountdown] = useState(5);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
   
-  // Track chat component loading state to prevent UI hang
+  // Track chat component loading state
   const [chatInterfaceReady, setChatInterfaceReady] = useState(false);
-  const [chatLoadingTimeout, setChatLoadingTimeout] = useState(false);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [loadAttempts, setLoadAttempts] = useState(0);
   
   // Handle window size safely in client-side
   useEffect(() => {
@@ -40,30 +163,29 @@ export default function ChatPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Force chat interface ready state if it takes too long
+  // Set loading timeout and retry logic
   useEffect(() => {
-    if (isAuthenticated && !chatInterfaceReady) {
-      // Set a timeout to show retry button if chat interface takes too long to load
+    if (isAuthenticated && !chatInterfaceReady && !loadingTimedOut) {
+      // Initial timeout (8 seconds)
       const timeoutId = setTimeout(() => {
-        setChatLoadingTimeout(true);
+        setLoadingTimedOut(true);
         setShowRetryButton(true);
-      }, 8000); // 8 seconds should be enough for normal loading
+      }, 8000);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [isAuthenticated, chatInterfaceReady]);
+  }, [isAuthenticated, chatInterfaceReady, loadingTimedOut, loadAttempts]);
 
   // Check authentication status when component mounts or auth state changes
   useEffect(() => {
     if (!loading) {
       if (!isAuthenticated) {
         setShowWarning(true);
-        // Reset chat interface state when not authenticated
         setChatInterfaceReady(false);
       } else {
-        // If authentication succeeded, assume chat interface will load
-        setChatLoadingTimeout(false);
-        setShowRetryButton(false);
+        // If authenticated, reset warning and prepare for loading
+        setShowWarning(false);
+        // Keep current loading state
       }
     }
   }, [loading, isAuthenticated]);
@@ -71,18 +193,25 @@ export default function ChatPage() {
   // Function to handle when chat interface is ready
   const handleChatInterfaceReady = useCallback(() => {
     setChatInterfaceReady(true);
-    setChatLoadingTimeout(false);
+    setLoadingTimedOut(false);
     setShowRetryButton(false);
+  }, []);
+
+  // Function to handle chat interface error
+  const handleChatInterfaceError = useCallback(() => {
+    setChatInterfaceReady(false);
+    setLoadingTimedOut(true);
+    setShowRetryButton(true);
   }, []);
 
   // Function to retry loading chat interface
   const handleRetryLoading = useCallback(() => {
     setChatInterfaceReady(false);
-    setChatLoadingTimeout(false);
+    setLoadingTimedOut(false);
     setShowRetryButton(false);
+    setLoadAttempts(prev => prev + 1);
     
     // Force a re-render of the chat interface
-    // This is just a trick to make React re-mount the component
     const timeoutId = setTimeout(() => {
       // This will force a re-load of the ChatInterface component
       router.refresh();
@@ -141,7 +270,7 @@ export default function ChatPage() {
     );
   }
 
-  // If authenticated but interface is loading, show a specific loading state
+  // If authenticated but chat interface is loading, show a specific loading state
   if (isAuthenticated && !chatInterfaceReady) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-primary-900 to-primary-800">
@@ -164,7 +293,7 @@ export default function ChatPage() {
           
           <h3 className="text-primary-50 text-lg font-medium mb-2">Mempersiapkan Chat</h3>
           <p className="text-primary-300 text-sm mb-4">
-            {chatLoadingTimeout ? 'Waktu muat lebih lama dari biasanya...' : 'Memuat antarmuka chat...'}
+            {loadingTimedOut ? 'Waktu muat lebih lama dari biasanya...' : 'Memuat antarmuka chat...'}
           </p>
           
           {!showRetryButton ? (
@@ -201,9 +330,47 @@ export default function ChatPage() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       {isAuthenticated ? (
-        <ChatInterface onReady={handleChatInterfaceReady} />
+        <Suspense fallback={
+          <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-primary-900 to-primary-800">
+            <div className="text-center p-8 bg-primary-800/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 shadow-lg">
+              <div className="relative w-20 h-20 mx-auto mb-4">
+                <div className="absolute inset-0 border-3 border-transparent border-t-accent-light border-b-accent-light rounded-full animate-spin"></div>
+                <div className="absolute inset-3 bg-primary-600 rounded-full flex items-center justify-center overflow-hidden">
+                  <Image
+                    src="/images/avatar.svg"
+                    alt="AI Peter"
+                    width={32}
+                    height={32}
+                    className="scale-125"
+                  />
+                </div>
+              </div>
+              <h3 className="text-primary-50 text-lg font-medium mb-2">Mempersiapkan Chat</h3>
+              <p className="text-primary-300 text-sm mb-4">Memuat antarmuka chat...</p>
+              <div className="h-2 bg-primary-700 rounded-full overflow-hidden relative">
+                <motion.div 
+                  className="h-full bg-accent"
+                  animate={{
+                    x: ["-100%", "100%"],
+                  }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 1.5,
+                    ease: "linear"
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        }>
+          <ChatInterface 
+            key={`chat-interface-${loadAttempts}`} 
+            onReady={handleChatInterfaceReady} 
+            onError={handleChatInterfaceError}
+          />
+        </Suspense>
       ) : (
         <AnimatePresence>
           {showWarning && (
@@ -380,6 +547,6 @@ export default function ChatPage() {
           )}
         </AnimatePresence>
       )}
-    </>
+    </ErrorBoundary>
   );
 }
