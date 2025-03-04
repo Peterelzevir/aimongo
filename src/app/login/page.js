@@ -19,23 +19,42 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   
   const router = useRouter();
-  const { login, isAuthenticated } = useAuth() || { login: null, isAuthenticated: () => false };
+  const { login, isAuthenticated } = useAuth() || {};
 
-  // Redirect jika sudah login
+  // Redirect if already logged in with proper error handling
   useEffect(() => {
-    // Guard clause untuk menghindari error
-    if (typeof isAuthenticated !== 'function') return;
-    
-    try {
-      if (isAuthenticated()) {
-        router.push('/chat');
+    const checkAuthStatus = async () => {
+      setIsCheckingAuth(true);
+      try {
+        // First check if isAuthenticated is a function
+        if (typeof isAuthenticated === 'function') {
+          const authStatus = await Promise.resolve(isAuthenticated());
+          if (authStatus) {
+            router.push('/chat');
+            return;
+          }
+        } else {
+          // Alternative method: check localStorage or sessionStorage
+          const userLoggedIn = sessionStorage.getItem('userLoggedIn') === 'true';
+          const authToken = localStorage.getItem('authToken');
+          if (userLoggedIn || authToken) {
+            router.push('/chat');
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking authentication:', err);
+        // Continue to show login page on error
+      } finally {
+        setIsCheckingAuth(false);
       }
-    } catch (err) {
-      console.error('Error checking authentication:', err);
-    }
-  }, [router]); // Menghapus isAuthenticated dari dependency untuk mencegah loop
+    };
+
+    checkAuthStatus();
+  }, [router, isAuthenticated]);
 
   // Particles animation
   const totalParticles = 30;
@@ -52,7 +71,7 @@ export default function LoginPage() {
     try {
       console.log('Attempting API login for email:', credentials.email);
       
-      // Validasi kredensial sebelum mengirim request
+      // Validate credentials before sending request
       if (!credentials?.email || !credentials?.password) {
         console.error('Missing required fields');
         return { 
@@ -61,28 +80,28 @@ export default function LoginPage() {
         };
       }
 
-      // Menyiapkan body request dengan format yang konsisten
+      // Prepare request body with consistent format
       const requestBody = {
-        email: credentials.email.trim().toLowerCase(), // Normalisasi email
+        email: credentials.email.trim().toLowerCase(), // Normalize email
         password: credentials.password,
-        remember: !!credentials.remember // Pastikan boolean
+        remember: !!credentials.remember // Ensure boolean
       };
 
-      // Melakukan request dengan header yang jelas
+      // Make request with clear headers
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest', // Identifikasi AJAX request
-          'Cache-Control': 'no-cache, no-store' // Hindari caching untuk request auth
+          'X-Requested-With': 'XMLHttpRequest', // Identify AJAX request
+          'Cache-Control': 'no-cache, no-store' // Avoid caching for auth requests
         },
         body: JSON.stringify(requestBody),
-        credentials: 'include', // Pastikan cookie disertakan
-        cache: 'no-store' // Hindari caching
+        credentials: 'include', // Ensure cookies are included
+        cache: 'no-store' // Avoid caching
       });
       
-      // Ambil response JSON
+      // Get JSON response with error handling
       let data;
       try {
         data = await response.json();
@@ -99,13 +118,13 @@ export default function LoginPage() {
         };
       }
       
-      // Periksa apakah request berhasil berdasarkan status HTTP DAN success flag
+      // Check if request was successful based on HTTP status AND success flag
       if (!response.ok || data.success === false) {
         const errorMessage = data?.message || 
           data?.error || 
           `Error ${response.status}: ${response.statusText}`;
         
-        // Log lebih detail untuk debug
+        // Log more details for debugging
         console.error('Login failed:', { 
           status: response.status, 
           message: errorMessage,
@@ -118,29 +137,32 @@ export default function LoginPage() {
         };
       }
       
-      // Jika berhasil dan ingin mengingat user, simpan token
+      // If successful and want to remember user, save token
       if (requestBody.remember && data.token) {
         try {
           localStorage.setItem('authToken', data.token);
-          sessionStorage.setItem('userLoggedIn', 'true'); // Flag tambahan di session storage
+          sessionStorage.setItem('userLoggedIn', 'true'); // Additional flag in session storage
         } catch (storageError) {
           console.warn('Failed to store token in localStorage', storageError);
-          // Lanjutkan meskipun gagal menyimpan
+          // Continue even if storage fails
         }
+      } else {
+        // Always set session flag even if not remembering
+        sessionStorage.setItem('userLoggedIn', 'true');
       }
       
-      // Simpan data user di sessionStorage agar bisa diakses di seluruh aplikasi
+      // Save user data in sessionStorage to be accessible throughout the app
       if (data.user) {
         try {
           sessionStorage.setItem('user', JSON.stringify({
             id: data.user.id,
             email: data.user.email,
             name: data.user.name,
-            // Jangan menyimpan data sensitif di sini
+            // Don't store sensitive data here
           }));
         } catch (storageError) {
           console.warn('Failed to store user data in sessionStorage', storageError);
-          // Lanjutkan meskipun gagal menyimpan
+          // Continue even if storage fails
         }
       }
       
@@ -149,21 +171,21 @@ export default function LoginPage() {
         success: true, 
         data,
         user: data.user,
-        token: data.token // Kembalikan token jika diperlukan di client
+        token: data.token // Return token if needed on client
       };
     } catch (error) {
       console.error('Login API error:', error);
       
-      // Beri pesan error yang lebih spesifik berdasarkan jenis kesalahan
+      // Give more specific error message based on error type
       let errorMessage = 'Terjadi kesalahan pada server';
       
-      if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('Network')) {
         errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
-      } else if (error.message.includes('401') || error.message.includes('unauthorized')) {
+      } else if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
         errorMessage = 'Email atau password salah';
-      } else if (error.message.includes('429') || error.message.includes('too many')) {
+      } else if (error.message?.includes('429') || error.message?.includes('too many')) {
         errorMessage = 'Terlalu banyak percobaan login. Silakan coba lagi nanti.';
-      } else if (error.message.includes('400')) {
+      } else if (error.message?.includes('400')) {
         errorMessage = 'Format permintaan tidak valid. Pastikan data yang dimasukkan benar.';
       }
       
@@ -211,34 +233,34 @@ export default function LoginPage() {
         try {
           console.log('Attempting login via AuthContext');
           // Pass the rememberMe flag to the context login if it supports it
-          const contextLoginResult = await login(credentials.email, credentials.password, credentials.remember);
+          const contextLoginResult = await Promise.resolve(login(credentials.email, credentials.password, credentials.remember));
           
           console.log('Context login result:', contextLoginResult);
           
-          // Cek hasil dengan lebih detail - JANGAN HANYA KONVERSI KE BOOLEAN
+          // Check result in more detail - DON'T JUST CONVERT TO BOOLEAN
           if (typeof contextLoginResult === 'object') {
             if (contextLoginResult.success === true) {
-              // Format yang cocok dengan API (success flag)
+              // Format that matches API (success flag)
               result = contextLoginResult;
             } else if (contextLoginResult.success === false) {
-              // Gagal dengan pesan
+              // Failed with message
               result = {
                 success: false,
                 error: contextLoginResult.message || contextLoginResult.error || 'Login gagal'
               };
             } else {
-              // Objek tanpa flag success yang jelas, tidak dapat dipercaya
+              // Object without clear success flag, can't be trusted
               console.warn('Context login result missing success flag, using direct API');
               result = await loginWithAPI(credentials);
             }
           } else if (contextLoginResult === true) {
-            // Result adalah boolean true
+            // Result is boolean true
             result = { success: true };
           } else if (contextLoginResult === false) {
-            // Result adalah boolean false
+            // Result is boolean false
             result = { success: false, error: 'Email atau password salah' };
           } else {
-            // Hasil tidak jelas, gunakan API langsung
+            // Unclear result, use direct API
             console.warn('Context login result format unknown, using direct API');
             result = await loginWithAPI(credentials);
           }
@@ -261,6 +283,9 @@ export default function LoginPage() {
         return;
       }
       
+      // Set session flag regardless of remember me option
+      sessionStorage.setItem('userLoggedIn', 'true');
+      
       // Show success animation
       setLoginSuccess(true);
       
@@ -279,11 +304,21 @@ export default function LoginPage() {
     }
   };
 
+  // Show loading screen while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-primary-900">
+        <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-primary-300">Memeriksa status login...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden bg-primary-900 relative">
       {/* Animated background particles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Menghapus class bg-grid-pattern yang mungkin tidak didefinisikan */}
+        {/* Removed bg-grid-pattern class that might not be defined */}
         <div className="absolute inset-0 opacity-5"></div>
         
         {particles.map((particle) => (
@@ -327,7 +362,7 @@ export default function LoginPage() {
               className="relative"
             >
               <div className="absolute -inset-4 rounded-full bg-accent/20 blur-xl"></div>
-              {/* Image component dengan penanganan error */}
+              {/* Image component with error handling */}
               <div className="relative z-10 w-[100px] h-[100px] flex items-center justify-center">
                 <Image 
                   src="/images/logo.svg" 
@@ -335,7 +370,7 @@ export default function LoginPage() {
                   width={100}
                   height={100}
                   onError={(e) => {
-                    // Fallback jika gambar gagal dimuat
+                    // Fallback if image fails to load
                     e.target.onerror = null;
                     e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%234B5563'/%3E%3Ctext x='50%' y='50%' font-size='20' text-anchor='middle' fill='white' dominant-baseline='middle'%3ELogo%3C/text%3E%3C/svg%3E";
                   }}
