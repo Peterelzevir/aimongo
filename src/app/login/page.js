@@ -23,7 +23,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated } = useAuth() || { login: null, isAuthenticated: () => false };
 
-  // Redirect jika sudah login - perbaikan dependency array
+  // Redirect jika sudah login
   useEffect(() => {
     // Guard clause untuk menghindari error
     if (typeof isAuthenticated !== 'function') return;
@@ -50,8 +50,11 @@ export default function LoginPage() {
   // Direct API login function that matches the API route implementation
   const loginWithAPI = async (credentials) => {
     try {
+      console.log('Attempting API login for email:', credentials.email);
+      
       // Validasi kredensial sebelum mengirim request
       if (!credentials?.email || !credentials?.password) {
+        console.error('Missing required fields');
         return { 
           success: false, 
           error: 'Email dan password diperlukan' 
@@ -83,6 +86,11 @@ export default function LoginPage() {
       let data;
       try {
         data = await response.json();
+        console.log('API response received:', { 
+          status: response.status, 
+          success: data.success,
+          message: data.message
+        });
       } catch (parseError) {
         console.error('Error parsing response:', parseError);
         return { 
@@ -91,8 +99,8 @@ export default function LoginPage() {
         };
       }
       
-      // Periksa apakah request berhasil
-      if (!response.ok) {
+      // Periksa apakah request berhasil berdasarkan status HTTP DAN success flag
+      if (!response.ok || data.success === false) {
         const errorMessage = data?.message || 
           data?.error || 
           `Error ${response.status}: ${response.statusText}`;
@@ -104,7 +112,10 @@ export default function LoginPage() {
           details: data?.details || 'No additional details'
         });
         
-        throw new Error(errorMessage);
+        return {
+          success: false,
+          error: errorMessage
+        };
       }
       
       // Jika berhasil dan ingin mengingat user, simpan token
@@ -133,6 +144,7 @@ export default function LoginPage() {
         }
       }
       
+      console.log('Login API success, returning data');
       return { 
         success: true, 
         data,
@@ -167,6 +179,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     
+    console.log('Login form submitted', { email, passwordLength: password.length });
+    
     // Basic validation
     if (!email || !password) {
       setError('Mohon lengkapi semua kolom');
@@ -195,15 +209,39 @@ export default function LoginPage() {
       
       if (typeof login === 'function') {
         try {
+          console.log('Attempting login via AuthContext');
           // Pass the rememberMe flag to the context login if it supports it
           const contextLoginResult = await login(credentials.email, credentials.password, credentials.remember);
           
-          // Normalizing result format if context login doesn't return expected structure
-          result = {
-            success: !!contextLoginResult, // Konversi ke boolean jika tidak jelas
-            data: contextLoginResult,
-            error: contextLoginResult?.error || null,
-          };
+          console.log('Context login result:', contextLoginResult);
+          
+          // Cek hasil dengan lebih detail - JANGAN HANYA KONVERSI KE BOOLEAN
+          if (typeof contextLoginResult === 'object') {
+            if (contextLoginResult.success === true) {
+              // Format yang cocok dengan API (success flag)
+              result = contextLoginResult;
+            } else if (contextLoginResult.success === false) {
+              // Gagal dengan pesan
+              result = {
+                success: false,
+                error: contextLoginResult.message || contextLoginResult.error || 'Login gagal'
+              };
+            } else {
+              // Objek tanpa flag success yang jelas, tidak dapat dipercaya
+              console.warn('Context login result missing success flag, using direct API');
+              result = await loginWithAPI(credentials);
+            }
+          } else if (contextLoginResult === true) {
+            // Result adalah boolean true
+            result = { success: true };
+          } else if (contextLoginResult === false) {
+            // Result adalah boolean false
+            result = { success: false, error: 'Email atau password salah' };
+          } else {
+            // Hasil tidak jelas, gunakan API langsung
+            console.warn('Context login result format unknown, using direct API');
+            result = await loginWithAPI(credentials);
+          }
         } catch (contextError) {
           console.warn('Context login failed, using direct API', contextError);
           // If context login fails, use direct API call as fallback
@@ -211,10 +249,13 @@ export default function LoginPage() {
         }
       } else {
         // If login is not available in context, use direct API call
+        console.log('No login method in context, using direct API');
         result = await loginWithAPI(credentials);
       }
       
-      if (!result.success) {
+      console.log('Final login result:', { success: result.success, error: result.error });
+      
+      if (result.success !== true) {
         setError(result.error || 'Email atau password salah');
         setIsLoading(false);
         return;
