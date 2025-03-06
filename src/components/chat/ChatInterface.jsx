@@ -17,7 +17,7 @@ import { useChatContext } from '@/context/ChatContext';
 import { saveConversationForSharing } from '@/lib/api';
 import Image from 'next/image';
 
-export default function ChatInterface() {
+export default function ChatInterface({ onReady, onError }) {
   const {
     messages,
     isProcessing,
@@ -40,6 +40,22 @@ export default function ChatInterface() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   
   const chatContainerRef = useRef(null);
+
+  // Add this useEffect to notify the parent when the component is ready
+  useEffect(() => {
+    try {
+      // Signal that the chat interface has loaded successfully
+      if (onReady) {
+        console.log('ChatInterface mounted successfully, calling onReady');
+        onReady();
+      }
+    } catch (error) {
+      console.error('Error initializing ChatInterface:', error);
+      if (onError) {
+        onError(error);
+      }
+    }
+  }, [onReady, onError]);
 
   // Check if we're on mobile & listen for resize
   useEffect(() => {
