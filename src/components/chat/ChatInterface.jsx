@@ -21,27 +21,66 @@ import Image from 'next/image';
 export default function ChatInterface({ onReady }) {
   // Context initialization state
   const [isContextReady, setIsContextReady] = useState(false);
+  const [contextError, setContextError] = useState(false);
   
-  // Tambahkan pengecekan nilai context yang null/undefined
+  // Get contexts
   const chatContext = useChatContext();
   const authContext = useAuth();
   
-  // Notify parent when component is ready
+  // Notify parent component about ready state
   useEffect(() => {
-    if (chatContext && !isContextReady) {
+    // Setup a safety timeout to ensure onReady gets called even if contexts fail
+    const safetyTimeout = setTimeout(() => {
+      if (!isContextReady && onReady && typeof onReady === 'function') {
+        console.log('Safety timeout: forcing chat interface ready state');
+        setIsContextReady(true);
+        onReady();
+      }
+    }, 3000); // 3 second safety timeout
+    
+    // Check if both contexts are available
+    if (chatContext && authContext && !isContextReady) {
+      console.log('Contexts loaded successfully, marking chat interface as ready');
       setIsContextReady(true);
+      clearTimeout(safetyTimeout);
+      
       if (onReady && typeof onReady === 'function') {
         // Small delay to ensure UI is rendered
         const timer = setTimeout(() => {
           onReady();
         }, 100);
-        return () => clearTimeout(timer);
+        return () => {
+          clearTimeout(timer);
+          clearTimeout(safetyTimeout);
+        };
       }
+    } else if (!chatContext || !authContext) {
+      // Log the missing context for debugging
+      console.warn('Missing context:', {
+        chatContext: !!chatContext,
+        authContext: !!authContext
+      });
+      
+      // If contexts aren't available after 2 seconds, mark as error
+      const errorTimeout = setTimeout(() => {
+        setContextError(true);
+        // Still call onReady to prevent eternal loading
+        if (onReady && typeof onReady === 'function') {
+          onReady();
+        }
+      }, 2000);
+      
+      return () => {
+        clearTimeout(errorTimeout);
+        clearTimeout(safetyTimeout);
+      };
     }
-  }, [chatContext, isContextReady, onReady]);
+    
+    return () => clearTimeout(safetyTimeout);
+  }, [chatContext, authContext, isContextReady, onReady]);
   
-  // Jika context tidak tersedia, tampilkan UI loading
-  if (!chatContext || !authContext) {
+  // Show loading UI if contexts aren't ready
+  if ((!chatContext || !authContext) && !contextError) {
     return (
       <div className="flex items-center justify-center h-screen text-primary-200">
         <div className="text-center">
@@ -52,7 +91,30 @@ export default function ChatInterface({ onReady }) {
     );
   }
   
-  // Destructure hanya setelah memastikan context ada
+  // Show error UI if contexts failed to load
+  if (contextError || (!chatContext && !authContext)) {
+    return (
+      <div className="flex items-center justify-center h-screen text-primary-200">
+        <div className="text-center bg-primary-800/80 p-6 rounded-lg shadow-lg max-w-md">
+          <div className="text-red-400 mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-medium text-primary-50 mb-2">Failed to load chat</h3>
+          <p className="mb-4">We encountered an issue while loading the chat interface. This may be due to a connection problem.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded transition-colors inline-flex items-center"
+          >
+            <FiRefreshCw className="mr-2" /> Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  // Safely destructure context values with fallbacks
   const {
     messages = [],
     isProcessing = false,
@@ -61,9 +123,9 @@ export default function ChatInterface({ onReady }) {
     clearConversation = () => {},
     toggleVoiceMode = () => {},
     generateShareableLink = () => '',
-  } = chatContext;
+  } = chatContext || {};
   
-  const { user = null, logout = () => {} } = authContext;
+  const { user = null, logout = () => {} } = authContext || {};
   
   // UI States
   const [shareUrl, setShareUrl] = useState('');
@@ -110,8 +172,8 @@ export default function ChatInterface({ onReady }) {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    // Tambahkan pengecekan untuk messages
-    if (chatContainerRef.current && messages && messages.length > 0) {
+    // Safely check if we can scroll
+    if (chatContainerRef.current && Array.isArray(messages) && messages.length > 0) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
       chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
@@ -161,9 +223,9 @@ export default function ChatInterface({ onReady }) {
   };
   
   // Filter messages based on search
-  const filteredMessages = messages && searchQuery.trim() 
+  const filteredMessages = Array.isArray(messages) && searchQuery.trim() 
     ? messages.filter(msg => 
-        msg.content.toLowerCase().includes(searchQuery.toLowerCase())
+        msg.content && msg.content.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : messages || [];
 
