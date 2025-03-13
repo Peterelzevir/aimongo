@@ -18,16 +18,15 @@ import { saveConversationForSharing } from '@/lib/api';
 import Image from 'next/image';
 
 export default function ChatInterface({ onReady, onError }) {
-  const chatContext = useChatContext();
-  
-  // Safely access ChatContext properties
-  const messages = chatContext?.messages || [];
-  const isProcessing = chatContext?.isProcessing || false;
-  const isVoiceMode = chatContext?.isVoiceMode || false;
-  const conversationId = chatContext?.conversationId || '';
-  const clearConversation = chatContext?.clearConversation || (() => {});
-  const toggleVoiceMode = chatContext?.toggleVoiceMode || (() => {});
-  const generateShareableLink = chatContext?.generateShareableLink || (() => '');
+  const {
+    messages,
+    isProcessing,
+    isVoiceMode,
+    conversationId,
+    clearConversation,
+    toggleVoiceMode,
+    generateShareableLink,
+  } = useChatContext();
   
   // UI States
   const [shareUrl, setShareUrl] = useState('');
@@ -39,33 +38,26 @@ export default function ChatInterface({ onReady, onError }) {
   const [showSearchBox, setShowSearchBox] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showInfoPanel, setShowInfoPanel] = useState(false);
-  const [isComponentInitialized, setIsComponentInitialized] = useState(false);
   
   const chatContainerRef = useRef(null);
 
-  // Add this useEffect to notify the parent when the component is ready
+  // Notifikasi komponen siap (tambahan)
   useEffect(() => {
     try {
-      const initTimeout = setTimeout(() => {
-        // Make sure the context is loaded before signaling ready
-        if (chatContext) {
-          console.log('ChatInterface initialized with ChatContext, calling onReady');
-          setIsComponentInitialized(true);
-          if (onReady) onReady();
-        } else {
-          console.error('ChatContext not available');
-          if (onError) onError(new Error('ChatContext not available'));
+      // Tunggu sebentar untuk memastikan semuanya dimuat
+      const readyTimer = setTimeout(() => {
+        if (onReady) {
+          console.log('ChatInterface siap, memanggil onReady');
+          onReady();
         }
-      }, 1000); // Give a short delay to ensure everything is initialized
+      }, 500);
       
-      return () => clearTimeout(initTimeout);
+      return () => clearTimeout(readyTimer);
     } catch (error) {
-      console.error('Error initializing ChatInterface:', error);
-      if (onError) {
-        onError(error);
-      }
+      console.error('Error pada ChatInterface:', error);
+      if (onError) onError(error);
     }
-  }, [chatContext, onReady, onError]);
+  }, [onReady, onError]);
 
   // Check if we're on mobile & listen for resize
   useEffect(() => {
@@ -83,7 +75,7 @@ export default function ChatInterface({ onReady, onError }) {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (chatContainerRef.current && messages.length > 0) {
+    if (chatContainerRef.current) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
       chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
