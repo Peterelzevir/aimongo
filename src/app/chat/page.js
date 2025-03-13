@@ -11,7 +11,10 @@ import { useAuth } from '@/context/AuthContext';
 
 // Import ChatInterface component with dynamic loading to prevent SSR issues
 const ChatInterface = dynamic(
-  () => import('@/components/chat/ChatInterface'),
+  () => import('@/components/chat/ChatInterface').catch(err => {
+    console.error("Failed to load ChatInterface:", err);
+    return () => null; // Return empty component on error
+  }),
   { 
     ssr: false,
     loading: () => (
@@ -168,20 +171,19 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Set loading timeout and retry logic
+  // Perbaikan: chatInterface selalu siap untuk mencegah stuck
   useEffect(() => {
-    if (isAuthenticated && !chatInterfaceReady && !loadingTimedOut) {
-      console.log('Setting up loading timeout');
-      // Tambahkan waktu timeout lebih lama (30 detik)
-      const timeoutId = setTimeout(() => {
-        console.log('Loading timed out after 30 seconds');
-        setLoadingTimedOut(true);
-        setShowRetryButton(true);
-      }, 30000); // Increased timeout to 30 seconds
+    if (isAuthenticated) {
+      const forceReadyTimeout = setTimeout(() => {
+        if (!chatInterfaceReady) {
+          console.log('Force setting chatInterfaceReady to true after delay');
+          setChatInterfaceReady(true);
+        }
+      }, 5000); // 5 detik timeout
       
-      return () => clearTimeout(timeoutId);
+      return () => clearTimeout(forceReadyTimeout);
     }
-  }, [isAuthenticated, chatInterfaceReady, loadingTimedOut]);
+  }, [isAuthenticated, chatInterfaceReady]);
 
   // Check authentication status when component mounts or auth state changes
   useEffect(() => {
@@ -345,44 +347,10 @@ export default function ChatPage() {
     <ErrorBoundary>
       {isAuthenticated ? (
         <div className="w-full h-full" key={`chat-wrapper-${loadAttempts}`}>
-          <Suspense fallback={
-            <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-primary-900 to-primary-800">
-              <div className="text-center p-8 bg-primary-800/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 shadow-lg">
-                <div className="relative w-20 h-20 mx-auto mb-4">
-                  <div className="absolute inset-0 border-3 border-transparent border-t-accent-light border-b-accent-light rounded-full animate-spin"></div>
-                  <div className="absolute inset-3 bg-primary-600 rounded-full flex items-center justify-center overflow-hidden">
-                    <Image
-                      src="/images/avatar.svg"
-                      alt="AI Peter"
-                      width={32}
-                      height={32}
-                      className="scale-125"
-                    />
-                  </div>
-                </div>
-                <h3 className="text-primary-50 text-lg font-medium mb-2">Mempersiapkan Chat</h3>
-                <p className="text-primary-300 text-sm mb-4">Memuat antarmuka chat...</p>
-                <div className="h-2 bg-primary-700 rounded-full overflow-hidden relative">
-                  <motion.div 
-                    className="h-full bg-accent"
-                    animate={{
-                      x: ["-100%", "100%"],
-                    }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 1.5,
-                      ease: "linear"
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          }>
-            <ChatInterface 
-              onReady={handleChatInterfaceReady} 
-              onError={handleChatInterfaceError}
-            />
-          </Suspense>
+          <ChatInterface 
+            onReady={handleChatInterfaceReady} 
+            onError={handleChatInterfaceError}
+          />
         </div>
       ) : (
         <AnimatePresence>
@@ -401,7 +369,7 @@ export default function ChatPage() {
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 className="bg-primary-800/90 backdrop-blur-md border border-primary-700/50 rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
               >
-                {/* Modal content (assuming it's defined elsewhere) */}
+                {/* ... Modal content ... */}
               </motion.div>
             </motion.div>
           )}
