@@ -20,6 +20,7 @@ export default function ChatPage() {
   const [chatInterfaceReady, setChatInterfaceReady] = useState(false);
   const [chatLoadingTimeout, setChatLoadingTimeout] = useState(false);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [loadAttempts, setLoadAttempts] = useState(0);
   
   // Handle window size safely in client-side
   useEffect(() => {
@@ -45,13 +46,14 @@ export default function ChatPage() {
     if (isAuthenticated && !chatInterfaceReady) {
       // Set a timeout to show retry button if chat interface takes too long to load
       const timeoutId = setTimeout(() => {
+        console.log('Chat interface loading timeout reached');
         setChatLoadingTimeout(true);
         setShowRetryButton(true);
-      }, 8000); // 8 seconds should be enough for normal loading
+      }, 6000); // Reduced from 8 to 6 seconds
       
       return () => clearTimeout(timeoutId);
     }
-  }, [isAuthenticated, chatInterfaceReady]);
+  }, [isAuthenticated, chatInterfaceReady, loadAttempts]);
 
   // Check authentication status when component mounts or auth state changes
   useEffect(() => {
@@ -61,15 +63,20 @@ export default function ChatPage() {
         // Reset chat interface state when not authenticated
         setChatInterfaceReady(false);
       } else {
-        // If authentication succeeded, assume chat interface will load
+        // If authentication succeeded, reset loading timeouts
         setChatLoadingTimeout(false);
-        setShowRetryButton(false);
+        
+        // Only hide retry button when interface is actually ready
+        if (chatInterfaceReady) {
+          setShowRetryButton(false);
+        }
       }
     }
-  }, [loading, isAuthenticated]);
+  }, [loading, isAuthenticated, chatInterfaceReady]);
 
   // Function to handle when chat interface is ready
   const handleChatInterfaceReady = useCallback(() => {
+    console.log('Chat interface signaled ready state');
     setChatInterfaceReady(true);
     setChatLoadingTimeout(false);
     setShowRetryButton(false);
@@ -77,14 +84,16 @@ export default function ChatPage() {
 
   // Function to retry loading chat interface
   const handleRetryLoading = useCallback(() => {
+    console.log('Retrying chat interface load');
     setChatInterfaceReady(false);
     setChatLoadingTimeout(false);
-    setShowRetryButton(false);
     
-    // Force a re-render of the chat interface
-    // This is just a trick to make React re-mount the component
+    // Increment load attempts to trigger the useEffect again
+    setLoadAttempts(prev => prev + 1);
+    
+    // Force a re-render of the chat interface with a brief delay
     const timeoutId = setTimeout(() => {
-      // This will force a re-load of the ChatInterface component
+      // This refresh is just a fallback - ideally component remounting works
       router.refresh();
     }, 100);
     
@@ -103,6 +112,18 @@ export default function ChatPage() {
       router.push('/login');
     }
   }, [countdown, router, showWarning]);
+
+  // Auto retry after 15 seconds if still loading
+  useEffect(() => {
+    if (isAuthenticated && chatLoadingTimeout && !chatInterfaceReady) {
+      const autoRetryTimeout = setTimeout(() => {
+        console.log('Auto-retrying chat interface load');
+        handleRetryLoading();
+      }, 6000); // Auto retry after 15 seconds
+      
+      return () => clearTimeout(autoRetryTimeout);
+    }
+  }, [isAuthenticated, chatLoadingTimeout, chatInterfaceReady, handleRetryLoading]);
 
   // Loading state with animated spinner
   if (loading) {
@@ -182,13 +203,18 @@ export default function ChatPage() {
               />
             </div>
           ) : (
-            <button
-              onClick={handleRetryLoading}
-              className="mt-4 px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg transition-colors flex items-center justify-center mx-auto"
-            >
-              <FiRefreshCw className="mr-2" />
-              Muat Ulang
-            </button>
+            <div>
+              <button
+                onClick={handleRetryLoading}
+                className="mt-4 px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg transition-colors flex items-center justify-center mx-auto"
+              >
+                <FiRefreshCw className="mr-2" />
+                Muat Ulang
+              </button>
+              <p className="text-primary-400 text-xs mt-3">
+                Jika masalah berlanjut, coba muat ulang halaman.
+              </p>
+            </div>
           )}
         </div>
         
@@ -203,7 +229,9 @@ export default function ChatPage() {
   return (
     <>
       {isAuthenticated ? (
-        <ChatInterface onReady={handleChatInterfaceReady} />
+        <div key={`chat-interface-${loadAttempts}`}>
+          <ChatInterface onReady={handleChatInterfaceReady} />
+        </div>
       ) : (
         <AnimatePresence>
           {showWarning && (
