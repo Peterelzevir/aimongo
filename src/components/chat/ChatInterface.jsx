@@ -18,15 +18,16 @@ import { saveConversationForSharing } from '@/lib/api';
 import Image from 'next/image';
 
 export default function ChatInterface({ onReady, onError }) {
-  const {
-    messages,
-    isProcessing,
-    isVoiceMode,
-    conversationId,
-    clearConversation,
-    toggleVoiceMode,
-    generateShareableLink,
-  } = useChatContext();
+  const chatContext = useChatContext();
+  
+  // Safely access ChatContext properties
+  const messages = chatContext?.messages || [];
+  const isProcessing = chatContext?.isProcessing || false;
+  const isVoiceMode = chatContext?.isVoiceMode || false;
+  const conversationId = chatContext?.conversationId || '';
+  const clearConversation = chatContext?.clearConversation || (() => {});
+  const toggleVoiceMode = chatContext?.toggleVoiceMode || (() => {});
+  const generateShareableLink = chatContext?.generateShareableLink || (() => '');
   
   // UI States
   const [shareUrl, setShareUrl] = useState('');
@@ -38,24 +39,33 @@ export default function ChatInterface({ onReady, onError }) {
   const [showSearchBox, setShowSearchBox] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [isComponentInitialized, setIsComponentInitialized] = useState(false);
   
   const chatContainerRef = useRef(null);
 
   // Add this useEffect to notify the parent when the component is ready
   useEffect(() => {
     try {
-      // Signal that the chat interface has loaded successfully
-      if (onReady) {
-        console.log('ChatInterface mounted successfully, calling onReady');
-        onReady();
-      }
+      const initTimeout = setTimeout(() => {
+        // Make sure the context is loaded before signaling ready
+        if (chatContext) {
+          console.log('ChatInterface initialized with ChatContext, calling onReady');
+          setIsComponentInitialized(true);
+          if (onReady) onReady();
+        } else {
+          console.error('ChatContext not available');
+          if (onError) onError(new Error('ChatContext not available'));
+        }
+      }, 1000); // Give a short delay to ensure everything is initialized
+      
+      return () => clearTimeout(initTimeout);
     } catch (error) {
       console.error('Error initializing ChatInterface:', error);
       if (onError) {
         onError(error);
       }
     }
-  }, [onReady, onError]);
+  }, [chatContext, onReady, onError]);
 
   // Check if we're on mobile & listen for resize
   useEffect(() => {
@@ -73,7 +83,7 @@ export default function ChatInterface({ onReady, onError }) {
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (chatContainerRef.current) {
+    if (chatContainerRef.current && messages.length > 0) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
       chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
