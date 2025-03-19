@@ -29,6 +29,15 @@ export default function ChatInterface({ onReady }) {
   
   // Notify parent component about ready state
   useEffect(() => {
+    // Safety mechanism - force ready state after a longer timeout if necessary
+    const safetyTimeoutLong = setTimeout(() => {
+      if (!isContextReady && onReady && typeof onReady === 'function') {
+        console.log('CRITICAL: Forcing chat interface ready state after long timeout');
+        setIsContextReady(true);
+        onReady();
+      }
+    }, 10000); // 10 second safety timeout as a last resort
+    
     // Setup a safety timeout to ensure onReady gets called even if contexts fail
     const safetyTimeout = setTimeout(() => {
       if (!isContextReady && onReady && typeof onReady === 'function') {
@@ -36,13 +45,32 @@ export default function ChatInterface({ onReady }) {
         setIsContextReady(true);
         onReady();
       }
-    }, 3000); // 3 second safety timeout
+    }, 5000); // 5 second safety timeout
     
-    // Check if both contexts are available
-    if (chatContext && authContext && !isContextReady) {
+    // Check auth context
+    console.log('Auth context state:', authContext ? 'Available' : 'Not available');
+    if (authContext) {
+      console.log('Auth initialized:', authContext.isInitialized);
+      console.log('Auth loading:', authContext.loading);
+      console.log('User authenticated:', authContext.isAuthenticated);
+    }
+    
+    // Check chat context
+    console.log('Chat context state:', chatContext ? 'Available' : 'Not available');
+    if (chatContext) {
+      console.log('Chat initialized:', chatContext.isInitialized);
+      console.log('Messages available:', Array.isArray(chatContext.messages) && chatContext.messages.length > 0);
+    }
+    
+    // Check if both contexts are available and initialized
+    const authReady = authContext && (authContext.isInitialized || !authContext.loading);
+    const chatReady = chatContext && chatContext.isInitialized;
+    
+    if (authReady && chatReady && !isContextReady) {
       console.log('Contexts loaded successfully, marking chat interface as ready');
       setIsContextReady(true);
       clearTimeout(safetyTimeout);
+      clearTimeout(safetyTimeoutLong);
       
       if (onReady && typeof onReady === 'function') {
         // Small delay to ensure UI is rendered
@@ -52,6 +80,7 @@ export default function ChatInterface({ onReady }) {
         return () => {
           clearTimeout(timer);
           clearTimeout(safetyTimeout);
+          clearTimeout(safetyTimeoutLong);
         };
       }
     } else if (!chatContext || !authContext) {
@@ -61,22 +90,27 @@ export default function ChatInterface({ onReady }) {
         authContext: !!authContext
       });
       
-      // If contexts aren't available after 2 seconds, mark as error
+      // If contexts aren't available after 3 seconds, mark as error
       const errorTimeout = setTimeout(() => {
+        console.error('Context timeout error - contexts not available after timeout');
         setContextError(true);
         // Still call onReady to prevent eternal loading
         if (onReady && typeof onReady === 'function') {
           onReady();
         }
-      }, 2000);
+      }, 3000);
       
       return () => {
         clearTimeout(errorTimeout);
         clearTimeout(safetyTimeout);
+        clearTimeout(safetyTimeoutLong);
       };
     }
     
-    return () => clearTimeout(safetyTimeout);
+    return () => {
+      clearTimeout(safetyTimeout);
+      clearTimeout(safetyTimeoutLong);
+    };
   }, [chatContext, authContext, isContextReady, onReady]);
   
   // Show loading UI if contexts aren't ready
