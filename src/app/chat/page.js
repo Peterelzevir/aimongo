@@ -49,7 +49,7 @@ export default function ChatPage() {
         console.log('Chat interface loading timeout reached');
         setChatLoadingTimeout(true);
         setShowRetryButton(true);
-      }, 6000); // Reduced from 8 to 6 seconds
+      }, 36000); // Reduced from 8 to 6 seconds
       
       return () => clearTimeout(timeoutId);
     }
