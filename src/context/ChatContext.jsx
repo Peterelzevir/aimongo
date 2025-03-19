@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { fetchAIResponse } from '@/lib/api';
 
@@ -11,38 +11,69 @@ export function useChatContext() {
 }
 
 export function ChatProvider({ children }) {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([{
+    id: uuidv4(),
+    role: 'assistant',
+    content: "Hello there! I'm AI Peter. How can I assist you today?",
+    timestamp: new Date().toISOString()
+  }]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [conversationId, setConversationId] = useState('');
+  const [conversationId, setConversationId] = useState(uuidv4());
+  const [isInitialized, setIsInitialized] = useState(false);
   
-  // Initialize a new conversation if there's none
+  // Ref to track if localStorage is available and working
+  const localStorageAvailable = useRef(false);
+  
+  // Check if localStorage is available and working
   useEffect(() => {
-    if (!conversationId) {
-      setConversationId(uuidv4());
+    try {
+      localStorage.setItem('chat_test', 'test');
+      localStorage.removeItem('chat_test');
+      localStorageAvailable.current = true;
+      console.log('localStorage is available');
+    } catch (e) {
+      console.warn('localStorage is not available:', e);
+      localStorageAvailable.current = false;
     }
     
-    // Load messages from localStorage if available
-    const loadedMessages = localStorage.getItem(`chat_${conversationId}`);
-    if (loadedMessages) {
-      setMessages(JSON.parse(loadedMessages));
-    } else if (messages.length === 0) {
-      // Add welcome message if this is a new conversation
-      setMessages([
-        {
-          id: uuidv4(),
-          role: 'assistant',
-          content: "Hello there! I'm AI Peter. How can I assist you today?",
-          timestamp: new Date().toISOString()
+    // Initialize a new conversation ID if needed
+    const newConversationId = uuidv4();
+    setConversationId(newConversationId);
+    console.log('Chat context initialized with conversation ID:', newConversationId);
+    
+    // Mark as initialized immediately with default welcome message
+    setIsInitialized(true);
+  }, []);
+  
+  // Load messages from localStorage after initialization
+  useEffect(() => {
+    if (!localStorageAvailable.current || !conversationId) return;
+    
+    try {
+      // Load messages from localStorage if available
+      const loadedMessages = localStorage.getItem(`chat_${conversationId}`);
+      if (loadedMessages) {
+        const parsedMessages = JSON.parse(loadedMessages);
+        if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
+          console.log('Loaded messages from localStorage:', parsedMessages.length);
+          setMessages(parsedMessages);
         }
-      ]);
+      }
+    } catch (e) {
+      console.error('Error loading messages from localStorage:', e);
+      // Continue with default welcome message
     }
   }, [conversationId]);
   
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    if (conversationId && messages.length > 0) {
+    if (!localStorageAvailable.current || !conversationId || messages.length === 0) return;
+    
+    try {
       localStorage.setItem(`chat_${conversationId}`, JSON.stringify(messages));
+    } catch (e) {
+      console.error('Error saving messages to localStorage:', e);
     }
   }, [messages, conversationId]);
 
@@ -107,7 +138,16 @@ export function ChatProvider({ children }) {
         timestamp: new Date().toISOString()
       }
     ]);
-  }, []);
+    
+    // Clean up localStorage for the old conversation
+    if (localStorageAvailable.current && conversationId) {
+      try {
+        localStorage.removeItem(`chat_${conversationId}`);
+      } catch (e) {
+        console.warn('Error clearing localStorage:', e);
+      }
+    }
+  }, [conversationId]);
 
   const generateShareableLink = useCallback(() => {
     return `${window.location.origin}/share/${conversationId}`;
@@ -125,7 +165,8 @@ export function ChatProvider({ children }) {
     sendMessage,
     clearConversation,
     generateShareableLink,
-    toggleVoiceMode
+    toggleVoiceMode,
+    isInitialized
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
