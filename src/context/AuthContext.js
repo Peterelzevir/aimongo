@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
   // Check if user is logged in on initial load
@@ -21,68 +22,73 @@ export function AuthProvider({ children }) {
         setLoading(true);
         console.log('Checking auth status...');
         
-        // Coba fetch data user dari API
-        const response = await fetch('/api/auth/me', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          credentials: 'include', // Include cookies
-          cache: 'no-store'
-        });
-
-        // Jika response OK, user terautentikasi
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            console.log('User authenticated:', data.user.email);
-            setUser(data.user);
-            
-            // Simpan di sessionStorage untuk fallback
-            try {
-              sessionStorage.setItem('user', JSON.stringify(data.user));
-            } catch (e) {
-              console.warn('Failed to store user in sessionStorage', e);
-            }
-          } else {
-            console.log('Auth verification failed:', data.message || 'Unknown error');
-            // Reset user jika verificasi gagal
-            setUser(null);
-            sessionStorage.removeItem('user');
-          }
-        } else {
-          console.log('Auth API returned error:', response.status);
-          // Reset user jika endpoint mengembalikan error
-          setUser(null);
-          
-          // Coba ambil dari sessionStorage sebagai fallback
+        // Coba ambil dari sessionStorage dulu sebagai quick-start
+        let userFromStorage = null;
+        try {
           const storedUser = sessionStorage.getItem('user');
           if (storedUser) {
-            try {
-              const parsedUser = JSON.parse(storedUser);
-              console.log('Using stored user data as fallback');
-              setUser(parsedUser);
-            } catch (e) {
-              console.warn('Failed to parse user from sessionStorage');
+            userFromStorage = JSON.parse(storedUser);
+            setUser(userFromStorage);
+            console.log('Using stored user data for initial render:', userFromStorage.email);
+          }
+        } catch (e) {
+          console.warn('Failed to parse user from sessionStorage');
+        }
+        
+        // Coba fetch data user dari API
+        try {
+          const response = await fetch('/api/auth/me', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+            },
+            credentials: 'include', // Include cookies
+            cache: 'no-store'
+          });
+
+          // Jika response OK, user terautentikasi
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.user) {
+              console.log('User authenticated from API:', data.user.email);
+              setUser(data.user);
+              
+              // Simpan di sessionStorage untuk fallback
+              try {
+                sessionStorage.setItem('user', JSON.stringify(data.user));
+              } catch (e) {
+                console.warn('Failed to store user in sessionStorage', e);
+              }
+            } else {
+              console.log('Auth verification failed:', data.message || 'Unknown error');
+              
+              // Tetap gunakan data dari sessionStorage jika ada
+              if (!userFromStorage) {
+                setUser(null);
+                sessionStorage.removeItem('user');
+              }
+            }
+          } else {
+            console.log('Auth API returned error:', response.status);
+            
+            // Tetap gunakan data dari sessionStorage jika ada
+            if (!userFromStorage) {
+              setUser(null);
+              // Jangan hapus sessionStorage jika API error
             }
           }
+        } catch (apiError) {
+          console.error('Error calling auth API:', apiError);
+          // Tetap gunakan data dari sessionStorage jika ada
         }
       } catch (error) {
         console.error('Error checking authentication:', error);
-        setUser(null);
-        
-        // Fallback untuk offline mode atau ketika API tidak tersedia
-        const storedUser = sessionStorage.getItem('user');
-        if (storedUser) {
-          try {
-            setUser(JSON.parse(storedUser));
-          } catch (e) {
-            console.warn('Failed to parse stored user data');
-          }
-        }
+        // No state changes here - rely on previously set states
       } finally {
         setLoading(false);
+        setIsInitialized(true);
+        console.log('Auth context initialized:', !!user);
       }
     };
 
@@ -220,6 +226,17 @@ export function AuthProvider({ children }) {
       document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       document.cookie = 'user-logged-in=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       
+      // Juga coba logout dari server
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        });
+      } catch (e) {
+        console.warn('Error during server logout:', e);
+        // Continue anyway
+      }
+      
       // Redirect ke login
       router.push('/login');
       
@@ -290,7 +307,7 @@ export function AuthProvider({ children }) {
   };
 
   // Check if user is authenticated
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!getUser();
 
   // The value that will be supplied to any consuming components
   const contextValue = {
@@ -301,7 +318,8 @@ export function AuthProvider({ children }) {
     logout,
     register,
     refreshAuth,
-    isAuthenticated
+    isAuthenticated,
+    isInitialized
   };
 
   return (
